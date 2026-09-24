@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>住まい すり合わせ</title>
+<link rel="stylesheet" href="style.css"/>
+<script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
+</head>
+
+<body>
+<div class="container">
+
+<div class="form-header">
+  <h1>住まい すり合わせ</h1>
+  <p class="form-description">
+  本サービスは、お相手との住まいに関する希望のすり合わせでの使用を目的としています。<br>
+  なお本サービスは、結婚相談所・マッチングアプリ・知人の紹介等ですでに知り合ったお相手との相互理解を深めるための自己開示支援サービスです。新たな出会いは提供しておりません。<br>
+  プライバシー保護：LINE IDはハッシュ化（暗号化）して保存されます。表示名・プロフィール画像・メールアドレスなどは取得されません。<br>
+  再回答について：同じLINEアカウントから回答された場合、以前の内容は上書きされます。</p>
+</div>
+
+<!-- ビューモード表示エリア（共有リンクで開いたとき） -->
+<div id="viewMode"></div>
+
+<!-- スクショ抑止ウォーターマーク（共有リンクの閲覧者にのみ表示） -->
+<div id="screenshotWatermark" aria-hidden="true"></div>
+
+<div id="formArea">
+
+<!-- Q1 -->
+<label>Q1 予算はいくらで考えていますか？</label>
+<label class="sub-label">自分が出せる額</label>
+<textarea id="q1_self" class="detail-textarea" placeholder="自由記述"></textarea>
+<label class="sub-label">お相手がもしいくらでも出してくれると仮定した場合の予算金額</label>
+<textarea id="q1_partner" class="detail-textarea" placeholder="自由記述"></textarea>
+
+<!-- Q2 -->
+<label>Q2 エリアはどのあたりを考えていますか？</label>
+<textarea id="q2" class="detail-textarea" placeholder="自由記述"></textarea>
+
+<!-- Q3 -->
+<label>Q3 以下について許容範囲のものにチェックをつけてください。</label>
+
+<label class="sub-label">間取りタイプ</label>
+<select id="q3_layout">
+  <option value="">選択してください</option>
+  <option>ワンルーム</option><option>1K</option><option>1DK</option><option>1LDK</option>
+  <option>2K</option><option>2DK</option><option>2LDK</option>
+  <option>3K</option><option>3DK</option><option>3LDK</option>
+  <option>4K</option><option>4DK</option><option>4LDK</option><option>5K以上</option>
+</select>
+
+<label class="sub-label">駅からの徒歩分数</label>
+<label><input type="checkbox" name="q3_walk" value="5分以内">5分以内</label>
+<label><input type="checkbox" name="q3_walk" value="10分以内">10分以内</label>
+<label><input type="checkbox" name="q3_walk" value="15分以内">15分以内</label>
+<label><input type="checkbox" name="q3_walk" value="20分以内">20分以内</label>
+<label><input type="checkbox" name="q3_walk" value="30分以内">30分以内</label>
+<label><input type="checkbox" name="q3_walk" value="バス・自転車等利用の距離でも可">バス・自転車等利用の距離でも可</label>
+
+<label class="sub-label">築年数</label>
+<label><input type="checkbox" name="q3_age" value="新築">新築</label>
+<label><input type="checkbox" name="q3_age" value="3年以内">3年以内</label>
+<label><input type="checkbox" name="q3_age" value="10年以内">10年以内</label>
+
+<label class="sub-label">専有面積</label>
+<label><input type="checkbox" name="q3_size" value="20㎡以下">20㎡以下</label>
+<label><input type="checkbox" name="q3_size" value="50㎡">50㎡</label>
+<label><input type="checkbox" name="q3_size" value="100㎡以上">100㎡以上</label>
+
+<label class="sub-label">構造</label>
+<label><input type="checkbox" name="q3_struct" value="鉄筋系">鉄筋系</label>
+<label><input type="checkbox" name="q3_struct" value="鉄骨系">鉄骨系</label>
+<label><input type="checkbox" name="q3_struct" value="軽量鉄骨">軽量鉄骨</label>
+<label><input type="checkbox" name="q3_struct" value="木造">木造</label>
+
+<!-- Q4 -->
+<label>Q4 次の要件について、「必須」「できれば満たしてほしい」「現在の住まいは満たしているがなくてもよい」「こだわらない」「満たさない方がよい」に分けて回答してください。</label>
+<p class="q-note">
+  ただし、「できれば満たしてほしい」ばかりになってしまうとお相手とのすり合わせが難しくなりますので、目安としては必須=○個、できれば=○個、どちらでもよい=○個程度にするのが望ましいです。（あくまで目安です。）
+</p>
+<div id="q4Counter"></div>
+<div id="q4Container"></div>
+
+<div class="button-group">
+  <button id="submitBtn" type="button">送信</button>
+  <div class="sub-buttons">
+    <button id="draftBtn" type="button">下書き保存</button>
+    <button id="clearBtn" type="button">フォームクリア</button>
+  </div>
+</div>
+
+</div><!-- /formArea -->
+
+<!-- 共有モーダル -->
+<div id="shareModal" class="modal hidden">
+  <div class="modal-content">
+    <h3>共有</h3>
+    <input id="shareName" type="text" placeholder="お名前を入力してください（任意）">
+    <button id="shareBtn">共有する</button>
+  </div>
+</div>
+
+</div>
+<script src="app.js"></script>
+</body>
+</html>
