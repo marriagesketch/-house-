@@ -33,23 +33,22 @@
 <label class="sub-label">自分が出せる額</label>
 <textarea id="q1_self" class="detail-textarea" placeholder="自由記述"></textarea>
 <label class="sub-label">お相手がもしいくらでも出してくれると仮定した場合の予算金額</label>
-<textarea id="q1_partner" class="detail-textarea" placeholder="自由記述"></textarea>
+<textarea id="q1_partner" class="detail-textarea"></textarea>
 
 <!-- Q2 -->
 <label>Q2 エリアはどのあたりを考えていますか？</label>
-<textarea id="q2" class="detail-textarea" placeholder="自由記述"></textarea>
+<textarea id="q2" class="detail-textarea"></textarea>
 
 <!-- Q3 -->
 <label>Q3 以下について許容範囲のものにチェックをつけてください。</label>
 
 <label class="sub-label">間取りタイプ</label>
-<select id="q3_layout">
-  <option value="">選択してください</option>
-  <option>ワンルーム</option><option>1K</option><option>1DK</option><option>1LDK</option>
-  <option>2K</option><option>2DK</option><option>2LDK</option>
-  <option>3K</option><option>3DK</option><option>3LDK</option>
-  <option>4K</option><option>4DK</option><option>4LDK</option><option>5K以上</option>
-</select>
+<label><input type="checkbox" name="q3_layout" value="ワンルーム">ワンルーム</label>
+<label><input type="checkbox" name="q3_layout" value="1K">1K</label>
+<label><input type="checkbox" name="q3_layout" value="1DK">1DK</label>
+<label><input type="checkbox" name="q3_layout" value="20分以内">20分以内</label>
+<label><input type="checkbox" name="q3_layout" value="30分以内">30分以内</label>
+<label><input type="checkbox" name="q3_layout" value="バス・自転車等利用の距離でも可">バス・自転車等利用の距離でも可</label>
 
 <label class="sub-label">駅からの徒歩分数</label>
 <label><input type="checkbox" name="q3_walk" value="5分以内">5分以内</label>
