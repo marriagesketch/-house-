@@ -8,7 +8,7 @@
    ============================================================ */
 
 // ▼▼▼ 要設定 ▼▼▼
-const LIFF_ID      = "YOUR_LIFF_ID";          // この住まいアプリ用に発行したLIFF ID
+const LIFF_ID      = "2010312230-0FcbsxfS";          // この住まいアプリ用に発行したLIFF ID
 const GAS_ENDPOINT = "YOUR_GAS_EXEC_URL";     // デプロイ済みGAS Web AppのURL
 // ▲▲▲▲▲▲▲▲▲▲▲▲
 
