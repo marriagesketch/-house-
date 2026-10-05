@@ -9,7 +9,7 @@
 
 // ▼▼▼ 要設定 ▼▼▼
 const LIFF_ID      = "2010312230-0FcbsxfS";          // この住まいアプリ用に発行したLIFF ID
-const GAS_ENDPOINT = "YOUR_GAS_EXEC_URL";     // デプロイ済みGAS Web AppのURL
+const GAS_ENDPOINT = "https://script.google.com/macros/s/AKfycbwq_7A9X1dvZu0FyN7F-7XuBcxj_csvP68-OtTXChuE6nGw4Ov0fqO6tpZVXcElTJn8/exec";     // デプロイ済みGAS Web AppのURL
 // ▲▲▲▲▲▲▲▲▲▲▲▲
 
 const DRAFT_KEY = "konkatsu_suriawase_house_draft";
