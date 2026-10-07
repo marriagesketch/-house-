@@ -17,7 +17,10 @@ const PENDING_SHARED_VIEW_KEY = "konkatsu_suriawase_house_pending_shared_view";
 const SHARETARGETPICKER_IMAGE_URL = "https://marriagesketch.github.io/-house-/sharetargetpicker.jpg";
 
 /* ============================================================
-   Q4 要件定義
+   Q4 の5段階評価
+   （Q4自体の項目リストはHTML側の <select id="q4_○○"> から動的に
+   拾うため、ここでは持たない。HTML側で項目を増減してもこのファイルの
+   修正は不要）
    ============================================================ */
 const LEVELS = [
   "必須",
@@ -27,32 +30,10 @@ const LEVELS = [
   "満たさない方がよい",
 ];
 
-const Q4_GROUPS = [
-  { title: "建物設備", items: [
-    "駐車場あり（駐車場2台以上、敷地内駐車場）", "駐輪場あり", "バイク置場あり", "エレベーター",
-    "宅配ボックス", "敷地内ゴミ置場", "バルコニー付（ルーフバルコニー付）", "専用庭",
-    "都市ガス", "プロパンガス", "バリアフリー", "ごみ出し24時間OK", "免震構造" ] },
-  { title: "位置", items: ["2階以上", "最上階", "角部屋", "南向き"] },
-  { title: "セキュリティ", items: [
-    "オートロック", "管理人有り", "TVモニタ付きインタホン", "防犯カメラ", "セキュリティ会社加入済" ] },
-  { title: "キッチン", items: [
-    "ガスコンロ対応", "IHコンロ", "コンロ2口以上", "オール電化", "システムキッチン",
-    "カウンターキッチン", "食器洗い乾燥機", "ディスポーザー", "冷蔵庫付き" ] },
-  { title: "バス・トイレ", items: [
-    "バス・トイレ別", "温水洗浄便座", "浴室乾燥機", "追い焚き風呂", "独立洗面台" ] },
-  { title: "テレビ・通信", items: ["インターネット無料", "BSアンテナ", "CSアンテナ", "ケーブルテレビ"] },
-  { title: "冷暖房", items: ["エアコン付き", "床暖房付き"] },
-  { title: "収納", items: [
-    "床下収納", "シューズボックス", "トランクルーム", "ウォークインクローゼット", "全居室収納" ] },
-  { title: "その他室内設備", items: [
-    "室内洗濯機置場", "洗面所独立", "全居室フローリング", "メゾネット", "ロフト", "防音室" ] },
-  { title: "入居条件・その他特徴", items: ["ペット相談可", "楽器相談可", "フロントサービス"] },
-];
-const Q4_ALL_ITEMS = Q4_GROUPS.flatMap(g => g.items);
-
-const Q3_CHECK_NAMES = ["q3_walk", "q3_age", "q3_size", "q3_struct"];
+const Q3_CHECK_NAMES = ["q3_layout", "q3_walk", "q3_age", "q3_size", "q3_struct"];
 const Q3_TITLES = {
-  q3_walk: "駅からの徒歩分数", q3_age: "築年数", q3_size: "専有面積", q3_struct: "構造",
+  q3_layout: "間取りタイプ", q3_walk: "駅からの徒歩分数", q3_age: "築年数",
+  q3_size: "専有面積", q3_struct: "構造",
 };
 
 /* ============================================================
@@ -129,35 +110,34 @@ function fallbackUUID() {
 }
 
 /* ============================================================
-   Q4 フォーム生成・カウンター
+   Q4（HTMLに直接書かれた <select id="q4_○○"> 群を使う）
    ============================================================ */
-function buildQ4() {
-  const container = document.getElementById("q4Container");
-  const options = `<option value="">選択してください</option>` +
-    LEVELS.map(l => `<option value="${escapeHTML(l)}">${escapeHTML(l)}</option>`).join("");
+function getQ4Selects() {
+  return document.querySelectorAll('select[id^="q4_"]');
+}
 
-  container.innerHTML = Q4_GROUPS.map(g => `
-    <div class="group-title">${escapeHTML(g.title)}</div>
-    ${g.items.map(item => `
-      <div class="item-row">
-        <span class="item-name">${escapeHTML(item)}</span>
-        <select class="level-select" data-item="${escapeHTML(item)}">${options}</select>
-      </div>`).join("")}
-  `).join("");
-
-  container.querySelectorAll(".level-select").forEach(sel =>
+/* HTMLに #q4Counter が無ければ、Q4の注意書き（.q-note）の直後に
+   カウンター表示用の枠を自動で挿入する */
+function initQ4() {
+  if (!document.getElementById("q4Counter")) {
+    const note = document.querySelector(".q-note");
+    if (note) note.insertAdjacentHTML("afterend", '<div id="q4Counter"></div>');
+  }
+  getQ4Selects().forEach(sel =>
     sel.addEventListener("change", () => { sel.classList.remove("unanswered"); updateQ4Counter(); }));
   updateQ4Counter();
 }
 
 function updateQ4Counter() {
+  const counter = document.getElementById("q4Counter");
+  if (!counter) return;
   const counts = {}; LEVELS.forEach(l => (counts[l] = 0));
   let unanswered = 0;
-  document.querySelectorAll(".level-select").forEach(sel => {
+  getQ4Selects().forEach(sel => {
     if (!sel.value) unanswered++; else counts[sel.value]++;
   });
   const short = ["必須", "できれば", "現状OK・なくても可", "こだわらない", "避けたい"];
-  document.getElementById("q4Counter").innerHTML =
+  counter.innerHTML =
     LEVELS.map((l, i) => `${short[i]} <b>${counts[l]}</b>`).join(" ／ ") +
     ` ／ 未回答 <b>${unanswered}</b>`;
 }
@@ -170,34 +150,34 @@ const getChecked = (name) =>
 
 function collectFormData() {
   const q4 = {};
-  document.querySelectorAll(".level-select").forEach(sel => { q4[sel.dataset.item] = sel.value; });
-  return {
+  getQ4Selects().forEach(sel => { q4[sel.id.slice(3)] = sel.value; }); // "q4_" の3文字を除去
+
+  const data = {
     q1_self:    document.getElementById("q1_self").value,
     q1_partner: document.getElementById("q1_partner").value,
     q2:         document.getElementById("q2").value,
-    q3_layout:  document.getElementById("q3_layout").value,
-    q3_walk:    getChecked("q3_walk"),
-    q3_age:     getChecked("q3_age"),
-    q3_size:    getChecked("q3_size"),
-    q3_struct:  getChecked("q3_struct"),
     q4,
+    q5:         document.getElementById("q5").value,
   };
+  Q3_CHECK_NAMES.forEach(name => { data[name] = getChecked(name); });
+  return data;
 }
 
 function restoreFormData(data) {
   if (!data) return;
-  ["q1_self", "q1_partner", "q2"].forEach(id => {
-    if (data[id] !== undefined) document.getElementById(id).value = data[id];
+  ["q1_self", "q1_partner", "q2", "q5"].forEach(id => {
+    const el = document.getElementById(id);
+    if (el && data[id] !== undefined) el.value = data[id];
   });
-  if (data.q3_layout) document.getElementById("q3_layout").value = data.q3_layout;
   Q3_CHECK_NAMES.forEach(name => {
     const vals = data[name];
     if (!Array.isArray(vals)) return;
     document.querySelectorAll(`input[name="${name}"]`).forEach(el => { el.checked = vals.includes(el.value); });
   });
   if (data.q4) {
-    document.querySelectorAll(".level-select").forEach(sel => {
-      if (data.q4[sel.dataset.item]) sel.value = data.q4[sel.dataset.item];
+    getQ4Selects().forEach(sel => {
+      const item = sel.id.slice(3);
+      if (data.q4[item]) sel.value = data.q4[item];
     });
   }
   updateQ4Counter();
@@ -211,13 +191,12 @@ function validate(data) {
   if (!data.q1_self.trim())    errors.push("Q1: 自分が出せる額を入力してください。");
   if (!data.q1_partner.trim()) errors.push("Q1: お相手が出してくれると仮定した場合の予算金額を入力してください。");
   if (!data.q2.trim())         errors.push("Q2: エリアを入力してください。");
-  if (!data.q3_layout)         errors.push("Q3: 間取りタイプを選択してください。");
   Q3_CHECK_NAMES.forEach(n => {
     if (data[n].length === 0)  errors.push(`Q3: ${Q3_TITLES[n]}を1つ以上選択してください。`);
   });
 
   let first = null, count = 0;
-  document.querySelectorAll(".level-select").forEach(sel => {
+  getQ4Selects().forEach(sel => {
     if (!sel.value) { sel.classList.add("unanswered"); count++; if (!first) first = sel; }
   });
   if (count > 0) {
@@ -234,11 +213,12 @@ function validate(data) {
 function buildAnalyticsPayload(data) {
   const p = {
     q1_self: data.q1_self || "", q1_partner: data.q1_partner || "", q2: data.q2 || "",
-    q3_layout: data.q3_layout || "",
+    q3_layout: data.q3_layout.join("、"),
     q3_walk: data.q3_walk.join("、"), q3_age: data.q3_age.join("、"),
     q3_size: data.q3_size.join("、"), q3_struct: data.q3_struct.join("、"),
+    q5: data.q5 || "",
   };
-  Q4_ALL_ITEMS.forEach(item => { p["q4_" + item] = (data.q4 && data.q4[item]) || ""; });
+  Object.keys(data.q4 || {}).forEach(item => { p["q4_" + item] = data.q4[item] || ""; });
   return p;
 }
 
@@ -287,20 +267,20 @@ function renderViewMode(data, options = {}) {
       html: `自分が出せる額：<br>${r(data.q1_self)}<br><br>お相手がいくらでも出してくれると仮定した場合の予算金額：<br>${r(data.q1_partner)}` },
     { q: "Q2 エリアはどのあたりを考えていますか？", html: r(data.q2) },
     { q: "Q3 許容範囲",
-      html: [
-        `<strong>間取りタイプ</strong><br>${r(data.q3_layout)}`,
-        ...Q3_CHECK_NAMES.map(n => `<strong>${Q3_TITLES[n]}</strong><br>${list(data[n])}`),
-      ].join("<br><br>") },
+      html: Q3_CHECK_NAMES.map(n => `<strong>${Q3_TITLES[n]}</strong><br>${list(data[n])}`).join("<br><br>") },
   ];
 
   const q4 = data.q4 || {};
+  const q4Items = Object.keys(q4); // collectFormData時のDOM順（＝HTML記載順）で入っている
   LEVELS.forEach(level => {
-    const items = Q4_ALL_ITEMS.filter(i => q4[i] === level);
+    const items = q4Items.filter(i => q4[i] === level);
     rows.push({
       q: `Q4 【${level}】（${items.length}件）`,
       html: items.length ? items.map(i => `・${escapeHTML(i)}`).join("<br>") : "なし",
     });
   });
+
+  rows.push({ q: "Q5 ほかに希望条件があれば記載してください。", html: r(data.q5) });
 
   hideFormElements();
   const formURL = location.href.split("?")[0].split("#")[0];
@@ -585,7 +565,7 @@ async function checkFriendship() {
   if (!liff.isLoggedIn()) { liff.login(); return; }
 
   checkFriendship();
-  buildQ4();
+  initQ4();
 
   /* 下書き復元 */
   try {
@@ -606,10 +586,9 @@ async function checkFriendship() {
   /* フォームクリア */
   document.getElementById("clearBtn").addEventListener("click", () => {
     if (!confirm("入力内容をすべてクリアしますか？")) return;
-    ["q1_self", "q1_partner", "q2"].forEach(id => (document.getElementById(id).value = ""));
-    document.getElementById("q3_layout").value = "";
+    ["q1_self", "q1_partner", "q2", "q5"].forEach(id => (document.getElementById(id).value = ""));
     document.querySelectorAll('input[type="checkbox"]').forEach(el => (el.checked = false));
-    document.querySelectorAll(".level-select").forEach(el => { el.value = ""; el.classList.remove("unanswered"); });
+    getQ4Selects().forEach(el => { el.value = ""; el.classList.remove("unanswered"); });
     updateQ4Counter();
     try { localStorage.removeItem(DRAFT_KEY); } catch (_) {}
   });
