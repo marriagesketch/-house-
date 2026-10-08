@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover"/>
+<meta name="theme-color" content="#f48ca0"/>
+<title>家族紹介</title>
+<link rel="stylesheet" href="style.css"/>
+<script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
+</head>
+<body>
+
+<!-- 読み込み中／エラー表示（パートナー確認中など） -->
+<div id="publicView" class="public-view container"></div>
+
+<!-- パートナー未登録の場合に表示 -->
+<div id="partnerRequired" class="container cta-card" style="display:none">
+  <p class="cta-title">パートナー登録が必要です</p>
+  <p class="cta-text">
+    家族紹介は、真剣交際のパートナー登録が完了した方のみご利用いただけます。<br>
+    先にパートナー登録を済ませてください。
+  </p>
+  <a href="https://liff.line.me/2010312230-xUsYz0UB" class="btn-primary cta-btn" style="display:block; text-decoration:none; text-align:center;">
+    パートナー登録はこちら
+  </a>
+</div>
+
+<!-- スクショ抑止ウォーターマーク（お相手の家族紹介を閲覧中のみ表示） -->
+<div id="screenshotWatermark" aria-hidden="true"></div>
+
+<!-- アプリ本体 -->
+<div id="app" class="app-shell container" style="display:none">
+
+  <!-- トップ画面 -->
+  <section id="screen-top" class="screen screen-top">
+    <div class="top-card">
+      <div class="top-deco" aria-hidden="true">
+        <svg viewBox="0 0 200 32" xmlns="http://www.w3.org/2000/svg">
+          <path d="M6 18 C40 4,60 30,90 16 S150 2,194 18" fill="none" stroke="#f4b8c5" stroke-width="2" stroke-linecap="round"/>
+          <circle cx="30" cy="11" r="3" fill="#f48ca0"/><circle cx="70" cy="23" r="3" fill="#f48ca0"/>
+          <circle cx="115" cy="9" r="3" fill="#f48ca0"/><circle cx="160" cy="22" r="3" fill="#f48ca0"/>
+        </svg>
+      </div>
+      <p class="top-eyebrow">ご家族の人柄を伝える</p>
+      <h1 class="top-title">家族紹介</h1>
+      <p class="top-desc">
+        ご家族お一人おひとりについて、人柄が伝わるように紹介します。項目はすべて任意です。わかる範囲でご記入ください。<br>
+        記載例では具体的な学校名、住所を書いていますが、個人情報になりますのでどこまでの情報を開示するかはお互いで合意の上ご利用ください。<br>
+        これらの情報をお相手に開示したことにより万が一トラブルが生じましても、本サービス運営者は一切の責任を負いません。ご留意ください。<br>
+        プライバシー保護：LINE IDはハッシュ化（暗号化）して保存されます。表示名・プロフィール画像・メールアドレスなどは取得されません。回答内容は、利用者端末側で暗号化した上で保存されます。運営者は暗号化されたデータのみを保持し、暗号鍵を保持していないため、当該回答内容を復元又は閲覧することはできません。<br>
+        再回答について：同じLINEアカウントから回答された場合、以前の内容は上書きされます。
+      </p>
+      <button id="startBtn" class="btn-primary" type="button">はじめる</button>
+      <button id="resumeBtn" class="btn-ghost hidden" type="button">続きから作成する</button>
+    </div>
+  </section>
+
+  <!-- メイン画面 -->
+  <section id="screen-main" class="screen screen-main hidden">
+
+    <header class="app-bar">
+      <span class="app-bar-title" id="appBarTitle">家族紹介</span>
+      <span id="saveStatus" class="save-status">
+        <svg viewBox="0 0 24 24" class="save-status-icon"><path d="M7 18a4 4 0 0 1-.6-7.96A5 5 0 0 1 16 9.5a3.5 3.5 0 0 1 .5 6.98" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        下書き保存中
+      </span>
+    </header>
+
+    <!-- 入力タブ -->
+    <div id="tab-input" class="tab-panel">
+      <div class="profile-card">
+        <p class="profile-card-label">家族紹介について</p>
+        <p class="field-hint family-intro-desc">
+          ご家族お一人おひとりについて、人柄が伝わるように紹介します。項目はすべて任意です。わかる範囲でご記入ください。<br>
+          記載例では具体的な学校名、住所を書いていますが、個人情報になりますのでどこまでの情報を開示するかはお互いで合意の上ご利用ください。<br>
+          これらの情報をお相手に開示したことにより万が一トラブルが生じましても、本サービス運営者は一切の責任を負いません。ご留意ください。
+        </p>
+      </div>
+      <p class="drag-hint">カード左上の「▲▼」ボタンで、並び順を入れ替えられます。</p>
+      <div id="familyList" class="card-list"></div>
+      <button id="addFamilyBtn" class="btn-add" type="button">＋ 家族を追加</button>
+    </div>
+
+    <!-- プレビュータブ -->
+    <div id="tab-preview" class="tab-panel hidden">
+      <button id="sendBtn" class="btn-primary btn-block" type="button">送信する</button>
+      <button id="backToInputBtn" class="btn-ghost btn-block" type="button">入力に戻って編集する</button>
+      <p id="ownSubmittedAt" class="save-status preview-submitted-at hidden"></p>
+
+      <div class="sub-switcher preview-person-switcher">
+        <button class="sub-switch-btn active" data-person="own" type="button">自分</button>
+        <button class="sub-switch-btn" data-person="partner" type="button" id="partnerTabBtn">お相手</button>
+      </div>
+
+      <div id="previewContent"></div>
+    </div>
+
+    <!-- 設定タブ -->
+    <div id="tab-settings" class="tab-panel hidden">
+      <div class="settings-panel">
+        <p class="settings-row-label">自動保存について</p>
+        <p class="settings-row-desc">入力・カード追加・カード削除・並び替えのたびに、この端末へ自動的に保存されます。「送信する」を押すまでは、この端末の中だけに保存され、お相手には届きません。</p>
+        <button id="resetFamilyBtn" class="btn-danger" type="button">入力内容を削除して最初から作成する</button>
+      </div>
+    </div>
+
+    <nav class="bottom-nav">
+      <button class="nav-btn active" data-tab="input" type="button">
+        <svg viewBox="0 0 24 24"><path d="M4 20h4l10-10-4-4L4 16v4Z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg>
+        <span>入力</span>
+      </button>
+      <button class="nav-btn" data-tab="preview" type="button">
+        <svg viewBox="0 0 24 24"><path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6-10-6-10-6Z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><circle cx="12" cy="12" r="2.6" fill="none" stroke="currentColor" stroke-width="1.6"/></svg>
+        <span>プレビュー</span>
+      </button>
+      <button class="nav-btn" data-tab="settings" type="button">
+        <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M19.4 13a7.6 7.6 0 0 0 0-2l2-1.4-2-3.4-2.3.8a7.7 7.7 0 0 0-1.8-1l-.3-2.4h-4l-.3 2.4a7.7 7.7 0 0 0-1.8 1l-2.3-.8-2 3.4 2 1.4a7.6 7.6 0 0 0 0 2l-2 1.4 2 3.4 2.3-.8a7.7 7.7 0 0 0 1.8 1l.3 2.4h4l.3-2.4a7.7 7.7 0 0 0 1.8-1l2.3.8 2-3.4-2-1.4Z" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/></svg>
+        <span>設定</span>
+      </button>
+    </nav>
+  </section>
+
+</div>
+
+<!-- 家族カードテンプレート -->
+<template id="familyCardTemplate">
+  <div class="life-card family-card">
+    <div class="life-card-header">
+      <div class="move-buttons">
+        <button class="move-up" type="button" aria-label="上に移動">▲</button>
+        <button class="move-down" type="button" aria-label="下に移動">▼</button>
+      </div>
+      <select class="card-category family-relation"></select>
+      <button class="delete-card" type="button" aria-label="カードを削除">×</button>
+    </div>
+    <div class="card-body">
+
+      <div class="field other-relation-field hidden">
+        <label>続柄を入力</label>
+        <input type="text" class="family-relationName" >
+      </div>
+
+      <div class="two-col">
+        <div class="field">
+          <label>生年月日</label>
+          <input type="date" class="family-birthdate">
+        </div>
+        <div class="field">
+          <label>年齢</label>
+          <div class="unit-input"><input type="number" inputmode="numeric" class="family-age" placeholder="55"><span>歳</span></div>
+        </div>
+      </div>
+
+      <div class="field">
+        <label>出身</label>
+        <input type="text" class="family-hometown" placeholder="神奈川県横浜市">
+      </div>
+
+      <div class="two-col">
+        <div class="field">
+          <label>最終学歴</label>
+          <select class="family-education"></select>
+        </div>
+        <div class="field">
+          <label>学校名（学部・専攻）</label>
+          <input type="text" class="family-schoolName" placeholder="○○大学 △△学部□□学科">
+        </div>
+      </div>
+
+      <div class="field">
+        <label>現職</label>
+        <input type="text" class="family-currentJob" placeholder="会社員（営業職）、主婦（主夫）など">
+      </div>
+
+      <div class="field">
+        <label>職歴</label>
+        <textarea class="family-jobHistory" placeholder="これまでの主な経歴（転職・転勤・独立など）"></textarea>
+      </div>
+
+      <div class="field">
+        <label>性格</label>
+        <textarea class="family-personality" placeholder="明るく面倒見が良い、几帳面　など"></textarea>
+      </div>
+
+      <div class="field">
+        <label>趣味</label>
+        <textarea class="family-hobby" placeholder="ゴルフ、家庭菜園、旅行　など"></textarea>
+      </div>
+
+      <div class="field">
+        <label>好きな食べ物</label>
+        <input type="text" class="family-favoriteFood" placeholder="寿司、カレー　など">
+      </div>
+
+      <div class="field">
+        <label>話すタイプ</label>
+        <select class="family-talkType"></select>
+      </div>
+
+    </div>
+  </div>
+</template>
+
+<script src="app.js"></script>
+</body>
+</html>
