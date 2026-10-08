@@ -136,7 +136,7 @@ function updateQ4Counter() {
   getQ4Selects().forEach(sel => {
     if (!sel.value) unanswered++; else counts[sel.value]++;
   });
-  const short = ["必須", "できれば", "現状OK・なくても可", "こだわらない", "避けたい"];
+  const short = ["必須", "できれば", "現状あり・なくても可", "こだわらない", "避けたい"];
   counter.innerHTML =
     LEVELS.map((l, i) => `${short[i]} <b>${counts[l]}</b>`).join(" ／ ") +
     ` ／ 未回答 <b>${unanswered}</b>`;
