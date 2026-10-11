@@ -2,411 +2,512 @@
 <html lang="ja">
 <head>
 <meta charset="UTF-8"/>
-<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover"/>
+<meta name="theme-color" content="#f48ca0"/>
 <title>住まい すり合わせ</title>
 <link rel="stylesheet" href="style.css"/>
 <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
 </head>
-
 <body>
-<div class="container">
 
-<div class="form-header">
-  <h1>家条件のすり合わせ</h1>
-  <p class="form-description">
-  本サービスは、お相手との住まいに関する希望のすり合わせでの使用を目的としています。<br>
-  プライバシー保護：LINE IDはハッシュ化（暗号化）して保存されます。表示名・プロフィール画像・メールアドレスなどは取得されません。<br>
-  再回答について：同じLINEアカウントから回答された場合、以前の内容は上書きされます。</p>
+<!-- 読み込み中／エラー表示（パートナー確認中など） -->
+<div id="publicView" class="public-view container"></div>
+
+<!-- パートナー未登録の場合に表示 -->
+<div id="partnerRequired" class="container cta-card" style="display:none">
+  <p class="cta-title">パートナー登録が必要です</p>
+  <p class="cta-text">
+    住まい すり合わせは、真剣交際のパートナー登録が完了した方のみご利用いただけます。<br>
+    先にパートナー登録を済ませてください。
+  </p>
+  <a href="https://liff.line.me/2010312230-xUsYz0UB" class="btn-primary cta-btn" style="display:block; text-decoration:none; text-align:center;">
+    パートナー登録はこちら
+  </a>
 </div>
 
-<!-- ビューモード表示エリア（共有リンクで開いたとき） -->
-<div id="viewMode"></div>
-
-<!-- スクショ抑止ウォーターマーク（共有リンクの閲覧者にのみ表示） -->
+<!-- スクショ抑止ウォーターマーク（お相手の回答を閲覧中のみ表示） -->
 <div id="screenshotWatermark" aria-hidden="true"></div>
 
-<div id="formArea">
+<!-- アプリ本体 -->
+<div id="app" class="app-shell container" style="display:none">
 
-<!-- Q1 -->
-<label>Q1 予算はいくらで考えていますか？</label>
-<label class="sub-label">自分が出せる額</label>
-<textarea id="q1_self" class="detail-textarea"></textarea>
-<label class="sub-label">お相手がもしいくらでも出してくれると仮定した場合の予算金額</label>
-<textarea id="q1_partner" class="detail-textarea"></textarea>
+  <!-- トップ画面 -->
+  <section id="screen-top" class="screen screen-top">
+    <div class="top-card">
+      <div class="top-deco" aria-hidden="true">
+        <svg viewBox="0 0 200 32" xmlns="http://www.w3.org/2000/svg">
+          <path d="M6 18 C40 4,60 30,90 16 S150 2,194 18" fill="none" stroke="#f4b8c5" stroke-width="2" stroke-linecap="round"/>
+          <circle cx="30" cy="11" r="3" fill="#f48ca0"/><circle cx="70" cy="23" r="3" fill="#f48ca0"/>
+          <circle cx="115" cy="9" r="3" fill="#f48ca0"/><circle cx="160" cy="22" r="3" fill="#f48ca0"/>
+        </svg>
+      </div>
+      <p class="top-eyebrow">住まいの希望をすり合わせる</p>
+      <h1 class="top-title">住まい すり合わせ</h1>
+      <p class="top-desc">
+        本サービスは、お相手との住まいに関する希望のすり合わせでの使用を目的としています。<br>
+        なお本サービスは、結婚相談所・マッチングアプリ・知人の紹介等ですでに知り合ったお相手との相互理解を深めるための自己開示支援サービスです。新たな出会いは提供しておりません。<br>
+        プライバシー保護：LINE IDはハッシュ化（暗号化）して保存されます。表示名・プロフィール画像・メールアドレスなどは取得されません。回答内容は、利用者端末側で暗号化した上で保存されます。運営者は暗号化されたデータのみを保持し、暗号鍵を保持していないため、当該回答内容を復元又は閲覧することはできません。<br>
+        再回答について：同じLINEアカウントから回答された場合、以前の内容は上書きされます。
+      </p>
+      <button id="startBtn" class="btn-primary" type="button">はじめる</button>
+      <button id="resumeBtn" class="btn-ghost hidden" type="button">続きから作成する</button>
+    </div>
+  </section>
 
-<!-- Q2 -->
-<label>Q2 エリアはどのあたりを考えていますか？</label>
-<textarea id="q2" class="detail-textarea"></textarea>
+  <!-- メイン画面 -->
+  <section id="screen-main" class="screen screen-main hidden">
 
-<!-- Q3 -->
-<label>Q3 以下について許容範囲のもの全てチェックしてください。</label>
+    <header class="app-bar">
+      <span class="app-bar-title" id="appBarTitle">住まい すり合わせ</span>
+      <span id="saveStatus" class="save-status">
+        <svg viewBox="0 0 24 24" class="save-status-icon"><path d="M7 18a4 4 0 0 1-.6-7.96A5 5 0 0 1 16 9.5a3.5 3.5 0 0 1 .5 6.98" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        下書き保存中
+      </span>
+    </header>
 
+    <!-- 入力タブ -->
+    <div id="tab-input" class="tab-panel">
+
+      <div class="profile-card">
+        <p class="q-title">Q1 予算はいくらで考えていますか？</p>
+        <label class="sub-label">自分が出せる額</label>
+        <textarea id="q1_self" class="detail-textarea"></textarea>
+        <label class="sub-label">お相手がもしいくらでも出してくれると仮定した場合の予算金額</label>
+        <textarea id="q1_partner" class="detail-textarea"></textarea>
+      </div>
+
+      <div class="profile-card">
+        <p class="q-title">Q2 エリアはどのあたりを考えていますか？</p>
+        <textarea id="q2" class="detail-textarea"></textarea>
+      </div>
+
+      <div class="profile-card">
+        <p class="q-title">Q3 以下について許容範囲のもの全てチェックしてください。</p>
 <label class="sub-label">間取りタイプ</label>
-<label><input type="checkbox" name="q3_layout" value="ワンルーム">ワンルーム</label>
-<label><input type="checkbox" name="q3_layout" value="1K">1K</label>
-<label><input type="checkbox" name="q3_layout" value="1DK">1DK</label>
-<label><input type="checkbox" name="q3_layout" value="1LDK">1LDK</label>
-<label><input type="checkbox" name="q3_layout" value="2K">2K</label>
-<label><input type="checkbox" name="q3_layout" value="2DK">2DK</label>
-<label><input type="checkbox" name="q3_layout" value="2LDK">2LDK</label>
-<label><input type="checkbox" name="q3_layout" value="3LDK">3LDK</label>
-<label><input type="checkbox" name="q3_layout" value="4LDK">4LDK</label>
-<label><input type="checkbox" name="q3_layout" value="5LDDK以上">5LDK以上</label>
-  
+<label class="check-label"><input type="checkbox" name="q3_layout" value="ワンルーム">ワンルーム</label>
+<label class="check-label"><input type="checkbox" name="q3_layout" value="1K">1K</label>
+<label class="check-label"><input type="checkbox" name="q3_layout" value="1DK">1DK</label>
+<label class="check-label"><input type="checkbox" name="q3_layout" value="1LDK">1LDK</label>
+<label class="check-label"><input type="checkbox" name="q3_layout" value="2K">2K</label>
+<label class="check-label"><input type="checkbox" name="q3_layout" value="2DK">2DK</label>
+<label class="check-label"><input type="checkbox" name="q3_layout" value="2LDK">2LDK</label>
+<label class="check-label"><input type="checkbox" name="q3_layout" value="3LDK">3LDK</label>
+<label class="check-label"><input type="checkbox" name="q3_layout" value="4LDK">4LDK</label>
+<label class="check-label"><input type="checkbox" name="q3_layout" value="5LDK以上">5LDK以上</label>
 <label class="sub-label">駅からの徒歩分数</label>
-<label><input type="checkbox" name="q3_walk" value="5分以内">5分以内</label>
-<label><input type="checkbox" name="q3_walk" value="10分以内">10分以内</label>
-<label><input type="checkbox" name="q3_walk" value="15分以内">15分以内</label>
-<label><input type="checkbox" name="q3_walk" value="20分以内">20分以内</label>
-<label><input type="checkbox" name="q3_walk" value="30分以内">30分以内</label>
-<label><input type="checkbox" name="q3_walk" value="バス・自転車等利用の距離でも可">バス・自転車等利用の距離でも可</label>
-
+<label class="check-label"><input type="checkbox" name="q3_walk" value="5分以内">5分以内</label>
+<label class="check-label"><input type="checkbox" name="q3_walk" value="10分以内">10分以内</label>
+<label class="check-label"><input type="checkbox" name="q3_walk" value="15分以内">15分以内</label>
+<label class="check-label"><input type="checkbox" name="q3_walk" value="20分以内">20分以内</label>
+<label class="check-label"><input type="checkbox" name="q3_walk" value="30分以内">30分以内</label>
+<label class="check-label"><input type="checkbox" name="q3_walk" value="バス・自転車等利用の距離でも可">バス・自転車等利用の距離でも可</label>
 <label class="sub-label">築年数</label>
-<label><input type="checkbox" name="q3_age" value="新築">新築</label>
-<label><input type="checkbox" name="q3_age" value="3年以内">3年以内</label>
-<label><input type="checkbox" name="q3_age" value="5年以内">5年以内</label>
-<label><input type="checkbox" name="q3_age" value="10年以内">10年以内</label>
-<label><input type="checkbox" name="q3_age" value="15年以内">15年以内</label>
-<label><input type="checkbox" name="q3_age" value="20年以内">20年以内</label>
-<label><input type="checkbox" name="q3_age" value="25年以内">25年以内</label>
-<label><input type="checkbox" name="q3_age" value="30年以内">30年以内</label>
-
+<label class="check-label"><input type="checkbox" name="q3_age" value="新築">新築</label>
+<label class="check-label"><input type="checkbox" name="q3_age" value="3年以内">3年以内</label>
+<label class="check-label"><input type="checkbox" name="q3_age" value="5年以内">5年以内</label>
+<label class="check-label"><input type="checkbox" name="q3_age" value="10年以内">10年以内</label>
+<label class="check-label"><input type="checkbox" name="q3_age" value="15年以内">15年以内</label>
+<label class="check-label"><input type="checkbox" name="q3_age" value="20年以内">20年以内</label>
+<label class="check-label"><input type="checkbox" name="q3_age" value="25年以内">25年以内</label>
+<label class="check-label"><input type="checkbox" name="q3_age" value="30年以内">30年以内</label>
 <label class="sub-label">専有面積</label>
-<label><input type="checkbox" name="q3_size" value="20㎡以下">20㎡以下</label>
-<label><input type="checkbox" name="q3_size" value="20㎡～25㎡">20㎡～25㎡</label>
-<label><input type="checkbox" name="q3_size" value="25㎡～30㎡">25㎡～30㎡</label>
-<label><input type="checkbox" name="q3_size" value="30㎡～35㎡">30㎡～35㎡</label>
-<label><input type="checkbox" name="q3_size" value="35㎡～40㎡">35㎡～40㎡</label>
-<label><input type="checkbox" name="q3_size" value="40㎡～45㎡">40㎡～45㎡</label>
-<label><input type="checkbox" name="q3_size" value="45㎡～50㎡">45㎡～50㎡</label>
-<label><input type="checkbox" name="q3_size" value="50㎡～55㎡">50㎡～55㎡</label>
-<label><input type="checkbox" name="q3_size" value="55㎡～60㎡">55㎡～60㎡</label>
-<label><input type="checkbox" name="q3_size" value="60㎡～65㎡">60㎡～65㎡</label>
-<label><input type="checkbox" name="q3_size" value="65㎡～70㎡">65㎡～70㎡</label>
-<label><input type="checkbox" name="q3_size" value="70㎡～75㎡">70㎡～75㎡</label>
-<label><input type="checkbox" name="q3_size" value="75㎡～80㎡">75㎡～80㎡</label>
-<label><input type="checkbox" name="q3_size" value="80㎡～85㎡">80㎡～85㎡</label>
-<label><input type="checkbox" name="q3_size" value="85㎡～90㎡">85㎡～90㎡</label>
-<label><input type="checkbox" name="q3_size" value="90㎡～95㎡">90㎡～95㎡</label>
-<label><input type="checkbox" name="q3_size" value="95㎡～100㎡">95㎡～100㎡</label>
-<label><input type="checkbox" name="q3_size" value="100㎡以上">100㎡以上</label>
-  
+<label class="check-label"><input type="checkbox" name="q3_size" value="20㎡以下">20㎡以下</label>
+<label class="check-label"><input type="checkbox" name="q3_size" value="20㎡～25㎡">20㎡～25㎡</label>
+<label class="check-label"><input type="checkbox" name="q3_size" value="25㎡～30㎡">25㎡～30㎡</label>
+<label class="check-label"><input type="checkbox" name="q3_size" value="30㎡～35㎡">30㎡～35㎡</label>
+<label class="check-label"><input type="checkbox" name="q3_size" value="35㎡～40㎡">35㎡～40㎡</label>
+<label class="check-label"><input type="checkbox" name="q3_size" value="40㎡～45㎡">40㎡～45㎡</label>
+<label class="check-label"><input type="checkbox" name="q3_size" value="45㎡～50㎡">45㎡～50㎡</label>
+<label class="check-label"><input type="checkbox" name="q3_size" value="50㎡～55㎡">50㎡～55㎡</label>
+<label class="check-label"><input type="checkbox" name="q3_size" value="55㎡～60㎡">55㎡～60㎡</label>
+<label class="check-label"><input type="checkbox" name="q3_size" value="60㎡～65㎡">60㎡～65㎡</label>
+<label class="check-label"><input type="checkbox" name="q3_size" value="65㎡～70㎡">65㎡～70㎡</label>
+<label class="check-label"><input type="checkbox" name="q3_size" value="70㎡～75㎡">70㎡～75㎡</label>
+<label class="check-label"><input type="checkbox" name="q3_size" value="75㎡～80㎡">75㎡～80㎡</label>
+<label class="check-label"><input type="checkbox" name="q3_size" value="80㎡～85㎡">80㎡～85㎡</label>
+<label class="check-label"><input type="checkbox" name="q3_size" value="85㎡～90㎡">85㎡～90㎡</label>
+<label class="check-label"><input type="checkbox" name="q3_size" value="90㎡～95㎡">90㎡～95㎡</label>
+<label class="check-label"><input type="checkbox" name="q3_size" value="95㎡～100㎡">95㎡～100㎡</label>
+<label class="check-label"><input type="checkbox" name="q3_size" value="100㎡以上">100㎡以上</label>
 <label class="sub-label">構造</label>
-<label><input type="checkbox" name="q3_struct" value="鉄筋系">鉄筋系</label>
-<label><input type="checkbox" name="q3_struct" value="鉄骨系">鉄骨系</label>
-<label><input type="checkbox" name="q3_struct" value="軽量鉄骨">軽量鉄骨</label>
-<label><input type="checkbox" name="q3_struct" value="木造">木造</label>
+<label class="check-label"><input type="checkbox" name="q3_struct" value="鉄筋系">鉄筋系</label>
+<label class="check-label"><input type="checkbox" name="q3_struct" value="鉄骨系">鉄骨系</label>
+<label class="check-label"><input type="checkbox" name="q3_struct" value="軽量鉄骨">軽量鉄骨</label>
+<label class="check-label"><input type="checkbox" name="q3_struct" value="木造">木造</label>
+      </div>
 
-<!-- Q4 -->
-<label>Q4 次の要件について、「必須」「できれば満たしてほしい」「現在の住まいは満たしているがなくてもよい」「こだわらない」「満たさない方がよい」に分けて回答してください。</label>
-<p class="q-note">
-  ただし、「できれば満たしてほしい」ばかりになってしまうとお相手とのすり合わせが難しくなりますので、目安としては必須=○個、できれば=○個、どちらでもよい=○個程度にするのが望ましいです。（あくまで目安です。）
-</p>
-
+      <div class="profile-card">
+        <p class="q-title">Q4 次の要件について、「必須」「できれば満たしてほしい」「現在の住まいは満たしているがなくてもよい」「こだわらない」「満たさない方がよい」に分けて回答してください。</p>
+        <p class="q-note">
+          ただし、「できれば満たしてほしい」ばかりになってしまうとお相手とのすり合わせが難しくなりますので、目安としては必須=○個、できれば=○個、どちらでもよい=○個程度にするのが望ましいです。（あくまで目安です。）
+        </p>
+        <div id="q4Counter"></div>
 <label class="sub-label">建物設備</label>
-
+<div class="field">
 <label>駐車場</label>
 <select id="q4_駐車場">
   <option value="">選択してください</option>
   <option>必須</option><option>できれば満たしてほしい</option><option>現在の住まいは満たしているがなくてもよい</option><option>こだわらない</option><option>満たさない方がよい</option>
 </select>
-  
+</div>
+<div class="field">
 <label>駐輪場・バイク置き場</label>
 <select id="q4_駐輪場・バイク置き場">
   <option value="">選択してください</option>
   <option>必須</option><option>できれば満たしてほしい</option><option>現在の住まいは満たしているがなくてもよい</option><option>こだわらない</option><option>満たさない方がよい</option>
 </select>
-
+</div>
+<div class="field">
 <label>エレベーター</label>
 <select id="q4_エレベーター">
   <option value="">選択してください</option>
   <option>必須</option><option>できれば満たしてほしい</option><option>現在の住まいは満たしているがなくてもよい</option><option>こだわらない</option><option>満たさない方がよい</option>
 </select>
-
+</div>
+<div class="field">
 <label>宅配ボックス</label>
 <select id="q4_宅配ボックス">
   <option value="">選択してください</option>
   <option>必須</option><option>できれば満たしてほしい</option><option>現在の住まいは満たしているがなくてもよい</option><option>こだわらない</option><option>満たさない方がよい</option>
 </select>
-
+</div>
+<div class="field">
 <label>敷地内ゴミ置場</label>
 <select id="q4_敷地内ゴミ置場">
   <option value="">選択してください</option>
   <option>必須</option><option>できれば満たしてほしい</option><option>現在の住まいは満たしているがなくてもよい</option><option>こだわらない</option><option>満たさない方がよい</option>
 </select>
-
+</div>
+<div class="field">
 <label>バルコニー</label>
 <select id="q4_バルコニー">
   <option value="">選択してください</option>
   <option>必須</option><option>できれば満たしてほしい</option><option>現在の住まいは満たしているがなくてもよい</option><option>こだわらない</option><option>満たさない方がよい</option>
 </select>
-
+</div>
+<div class="field">
 <label>ごみ出し24時間OK</label>
 <select id="q4_ごみ出し24時間OK">
   <option value="">選択してください</option>
   <option>必須</option><option>できれば満たしてほしい</option><option>現在の住まいは満たしているがなくてもよい</option><option>こだわらない</option><option>満たさない方がよい</option>
 </select>
-
+</div>
 <label class="sub-label">位置</label>
-
+<div class="field">
 <label>2階以上</label>
 <select id="q4_2階以上">
   <option value="">選択してください</option>
   <option>必須</option><option>できれば満たしてほしい</option><option>現在の住まいは満たしているがなくてもよい</option><option>こだわらない</option><option>満たさない方がよい</option>
 </select>
-
+</div>
+<div class="field">
 <label>最上階</label>
 <select id="q4_最上階">
   <option value="">選択してください</option>
   <option>必須</option><option>できれば満たしてほしい</option><option>現在の住まいは満たしているがなくてもよい</option><option>こだわらない</option><option>満たさない方がよい</option>
 </select>
-
+</div>
+<div class="field">
 <label>角部屋</label>
 <select id="q4_角部屋">
   <option value="">選択してください</option>
   <option>必須</option><option>できれば満たしてほしい</option><option>現在の住まいは満たしているがなくてもよい</option><option>こだわらない</option><option>満たさない方がよい</option>
 </select>
-
+</div>
+<div class="field">
 <label>南向き</label>
 <select id="q4_南向き">
   <option value="">選択してください</option>
   <option>必須</option><option>できれば満たしてほしい</option><option>現在の住まいは満たしているがなくてもよい</option><option>こだわらない</option><option>満たさない方がよい</option>
 </select>
-
+</div>
 <label class="sub-label">セキュリティ</label>
-
+<div class="field">
 <label>オートロック</label>
 <select id="q4_オートロック">
   <option value="">選択してください</option>
   <option>必須</option><option>できれば満たしてほしい</option><option>現在の住まいは満たしているがなくてもよい</option><option>こだわらない</option><option>満たさない方がよい</option>
 </select>
-
+</div>
+<div class="field">
 <label>管理人有り</label>
 <select id="q4_管理人有り">
   <option value="">選択してください</option>
   <option>必須</option><option>できれば満たしてほしい</option><option>現在の住まいは満たしているがなくてもよい</option><option>こだわらない</option><option>満たさない方がよい</option>
 </select>
-
+</div>
+<div class="field">
 <label>TVモニタ付きインタホン</label>
 <select id="q4_TVモニタ付きインタホン">
   <option value="">選択してください</option>
   <option>必須</option><option>できれば満たしてほしい</option><option>現在の住まいは満たしているがなくてもよい</option><option>こだわらない</option><option>満たさない方がよい</option>
 </select>
-
+</div>
+<div class="field">
 <label>防犯カメラ</label>
 <select id="q4_防犯カメラ">
   <option value="">選択してください</option>
   <option>必須</option><option>できれば満たしてほしい</option><option>現在の住まいは満たしているがなくてもよい</option><option>こだわらない</option><option>満たさない方がよい</option>
 </select>
-
+</div>
+<div class="field">
 <label>セキュリティ会社加入済</label>
 <select id="q4_セキュリティ会社加入済">
   <option value="">選択してください</option>
   <option>必須</option><option>できれば満たしてほしい</option><option>現在の住まいは満たしているがなくてもよい</option><option>こだわらない</option><option>満たさない方がよい</option>
 </select>
-
+</div>
 <label class="sub-label">キッチン</label>
-
+<div class="field">
 <label>ガスコンロ対応</label>
 <select id="q4_ガスコンロ対応">
   <option value="">選択してください</option>
   <option>必須</option><option>できれば満たしてほしい</option><option>現在の住まいは満たしているがなくてもよい</option><option>こだわらない</option><option>満たさない方がよい</option>
 </select>
-
+</div>
+<div class="field">
 <label>IHコンロ</label>
 <select id="q4_IHコンロ">
   <option value="">選択してください</option>
   <option>必須</option><option>できれば満たしてほしい</option><option>現在の住まいは満たしているがなくてもよい</option><option>こだわらない</option><option>満たさない方がよい</option>
 </select>
-
+</div>
+<div class="field">
 <label>コンロ2口以上</label>
 <select id="q4_コンロ2口以上">
   <option value="">選択してください</option>
   <option>必須</option><option>できれば満たしてほしい</option><option>現在の住まいは満たしているがなくてもよい</option><option>こだわらない</option><option>満たさない方がよい</option>
 </select>
-
+</div>
+<div class="field">
 <label>システムキッチン</label>
 <select id="q4_システムキッチン">
   <option value="">選択してください</option>
   <option>必須</option><option>できれば満たしてほしい</option><option>現在の住まいは満たしているがなくてもよい</option><option>こだわらない</option><option>満たさない方がよい</option>
 </select>
-
+</div>
+<div class="field">
 <label>カウンターキッチン</label>
 <select id="q4_カウンターキッチン">
   <option value="">選択してください</option>
   <option>必須</option><option>できれば満たしてほしい</option><option>現在の住まいは満たしているがなくてもよい</option><option>こだわらない</option><option>満たさない方がよい</option>
 </select>
-
+</div>
+<div class="field">
 <label>食洗機</label>
 <select id="q4_食洗機">
   <option value="">選択してください</option>
   <option>必須</option><option>できれば満たしてほしい</option><option>現在の住まいは満たしているがなくてもよい</option><option>こだわらない</option><option>満たさない方がよい</option>
 </select>
-
+</div>
+<div class="field">
 <label>ディスポーザー</label>
 <select id="q4_ディスポーザー">
   <option value="">選択してください</option>
   <option>必須</option><option>できれば満たしてほしい</option><option>現在の住まいは満たしているがなくてもよい</option><option>こだわらない</option><option>満たさない方がよい</option>
 </select>
-
+</div>
 <label class="sub-label">バス・トイレ</label>
-
+<div class="field">
 <label>バス・トイレ別</label>
 <select id="q4_バス・トイレ別">
   <option value="">選択してください</option>
   <option>必須</option><option>できれば満たしてほしい</option><option>現在の住まいは満たしているがなくてもよい</option><option>こだわらない</option><option>満たさない方がよい</option>
 </select>
-
+</div>
+<div class="field">
 <label>独立洗面台</label>
 <select id="q4_独立洗面台">
   <option value="">選択してください</option>
   <option>必須</option><option>できれば満たしてほしい</option><option>現在の住まいは満たしているがなくてもよい</option><option>こだわらない</option><option>満たさない方がよい</option>
 </select>
-
+</div>
+<div class="field">
 <label>温水洗浄便座</label>
 <select id="q4_温水洗浄便座">
   <option value="">選択してください</option>
   <option>必須</option><option>できれば満たしてほしい</option><option>現在の住まいは満たしているがなくてもよい</option><option>こだわらない</option><option>満たさない方がよい</option>
 </select>
-
+</div>
+<div class="field">
 <label>浴室乾燥機</label>
 <select id="q4_浴室乾燥機">
   <option value="">選択してください</option>
   <option>必須</option><option>できれば満たしてほしい</option><option>現在の住まいは満たしているがなくてもよい</option><option>こだわらない</option><option>満たさない方がよい</option>
 </select>
-
+</div>
+<div class="field">
 <label>追い焚き風呂</label>
 <select id="q4_追い焚き風呂">
   <option value="">選択してください</option>
   <option>必須</option><option>できれば満たしてほしい</option><option>現在の住まいは満たしているがなくてもよい</option><option>こだわらない</option><option>満たさない方がよい</option>
 </select>
-
+</div>
 <label class="sub-label">冷暖房</label>
-
+<div class="field">
 <label>エアコン付き</label>
 <select id="q4_エアコン付き">
   <option value="">選択してください</option>
   <option>必須</option><option>できれば満たしてほしい</option><option>現在の住まいは満たしているがなくてもよい</option><option>こだわらない</option><option>満たさない方がよい</option>
 </select>
-
+</div>
+<div class="field">
 <label>床暖房付き</label>
 <select id="q4_床暖房付き">
   <option value="">選択してください</option>
   <option>必須</option><option>できれば満たしてほしい</option><option>現在の住まいは満たしているがなくてもよい</option><option>こだわらない</option><option>満たさない方がよい</option>
 </select>
-
+</div>
 <label class="sub-label">収納</label>
-
+<div class="field">
 <label>床下収納</label>
 <select id="q4_床下収納">
   <option value="">選択してください</option>
   <option>必須</option><option>できれば満たしてほしい</option><option>現在の住まいは満たしているがなくてもよい</option><option>こだわらない</option><option>満たさない方がよい</option>
 </select>
-
+</div>
+<div class="field">
 <label>シューズボックス</label>
 <select id="q4_シューズボックス">
   <option value="">選択してください</option>
   <option>必須</option><option>できれば満たしてほしい</option><option>現在の住まいは満たしているがなくてもよい</option><option>こだわらない</option><option>満たさない方がよい</option>
 </select>
-
+</div>
+<div class="field">
 <label>トランクルーム</label>
 <select id="q4_トランクルーム">
   <option value="">選択してください</option>
   <option>必須</option><option>できれば満たしてほしい</option><option>現在の住まいは満たしているがなくてもよい</option><option>こだわらない</option><option>満たさない方がよい</option>
 </select>
-
+</div>
+<div class="field">
 <label>ウォークインクローゼット</label>
 <select id="q4_ウォークインクローゼット">
   <option value="">選択してください</option>
   <option>必須</option><option>できれば満たしてほしい</option><option>現在の住まいは満たしているがなくてもよい</option><option>こだわらない</option><option>満たさない方がよい</option>
 </select>
-
+</div>
+<div class="field">
 <label>全居室収納</label>
 <select id="q4_全居室収納">
   <option value="">選択してください</option>
   <option>必須</option><option>できれば満たしてほしい</option><option>現在の住まいは満たしているがなくてもよい</option><option>こだわらない</option><option>満たさない方がよい</option>
 </select>
-
+</div>
 <label class="sub-label">その他室内設備</label>
-
+<div class="field">
 <label>室内洗濯機置場</label>
 <select id="q4_室内洗濯機置場">
   <option value="">選択してください</option>
   <option>必須</option><option>できれば満たしてほしい</option><option>現在の住まいは満たしているがなくてもよい</option><option>こだわらない</option><option>満たさない方がよい</option>
 </select>
-
+</div>
+<div class="field">
 <label>インターネット無料</label>
 <select id="q4_インターネット無料">
   <option value="">選択してください</option>
   <option>必須</option><option>できれば満たしてほしい</option><option>現在の住まいは満たしているがなくてもよい</option><option>こだわらない</option><option>満たさない方がよい</option>
 </select>
-
+</div>
+<div class="field">
 <label>全居室フローリング</label>
 <select id="q4_全居室フローリング">
   <option value="">選択してください</option>
   <option>必須</option><option>できれば満たしてほしい</option><option>現在の住まいは満たしているがなくてもよい</option><option>こだわらない</option><option>満たさない方がよい</option>
 </select>
-
+</div>
+<div class="field">
 <label>和室</label>
 <select id="q4_和室">
   <option value="">選択してください</option>
   <option>必須</option><option>できれば満たしてほしい</option><option>現在の住まいは満たしているがなくてもよい</option><option>こだわらない</option><option>満たさない方がよい</option>
 </select>
-
+</div>
+<div class="field">
 <label>メゾネット</label>
 <select id="q4_メゾネット">
   <option value="">選択してください</option>
   <option>必須</option><option>できれば満たしてほしい</option><option>現在の住まいは満たしているがなくてもよい</option><option>こだわらない</option><option>満たさない方がよい</option>
 </select>
-
+</div>
+<div class="field">
 <label>ロフト</label>
 <select id="q4_ロフト">
   <option value="">選択してください</option>
   <option>必須</option><option>できれば満たしてほしい</option><option>現在の住まいは満たしているがなくてもよい</option><option>こだわらない</option><option>満たさない方がよい</option>
 </select>
-
+</div>
+<div class="field">
 <label>防音室</label>
 <select id="q4_防音室">
   <option value="">選択してください</option>
   <option>必須</option><option>できれば満たしてほしい</option><option>現在の住まいは満たしているがなくてもよい</option><option>こだわらない</option><option>満たさない方がよい</option>
 </select>
-
+</div>
 <label class="sub-label">入居条件・その他特徴</label>
-
+<div class="field">
 <label>ペット可能</label>
 <select id="q4_ペット可能">
   <option value="">選択してください</option>
   <option>必須</option><option>できれば満たしてほしい</option><option>現在の住まいは満たしているがなくてもよい</option><option>こだわらない</option><option>満たさない方がよい</option>
 </select>
-
+</div>
+<div class="field">
 <label>楽器可能</label>
 <select id="q4_楽器可能">
   <option value="">選択してください</option>
   <option>必須</option><option>できれば満たしてほしい</option><option>現在の住まいは満たしているがなくてもよい</option><option>こだわらない</option><option>満たさない方がよい</option>
 </select>
+</div>
+      </div>
 
-<!-- Q5 -->
-<label>Q5 ほかに希望条件があれば記載してください。</label>
-<textarea id="q5" class="detail-textarea"></textarea>
-  
-<div class="button-group">
-  <button id="submitBtn" type="button">送信</button>
-  <div class="sub-buttons">
-    <button id="draftBtn" type="button">下書き保存</button>
-    <button id="clearBtn" type="button">フォームクリア</button>
-  </div>
+      <div class="profile-card">
+        <p class="q-title">Q5 ほかに希望条件があれば記載してください。</p>
+        <textarea id="q5" class="detail-textarea"></textarea>
+      </div>
+
+    </div>
+
+    <!-- プレビュータブ -->
+    <div id="tab-preview" class="tab-panel hidden">
+      <button id="sendBtn" class="btn-primary btn-block" type="button">送信する</button>
+      <p id="ownSubmittedAt" class="save-status preview-submitted-at hidden"></p>
+
+      <div class="sub-switcher preview-person-switcher">
+        <button class="sub-switch-btn active" data-person="own" type="button">自分</button>
+        <button class="sub-switch-btn" data-person="partner" type="button" id="partnerTabBtn">お相手</button>
+      </div>
+
+      <div id="previewContent"></div>
+    </div>
+
+    <!-- 設定タブ -->
+    <div id="tab-settings" class="tab-panel hidden">
+      <div class="settings-panel">
+        <p class="settings-row-label">自動保存について</p>
+        <p class="settings-row-desc">入力のたびに、この端末へ自動的に保存されます。「送信する」を押すまでは、この端末の中だけに保存され、お相手には届きません。</p>
+        <button id="resetBtn" class="btn-danger" type="button">入力内容を削除して最初から作成する</button>
+      </div>
+    </div>
+
+    <nav class="bottom-nav">
+      <button class="nav-btn active" data-tab="input" type="button">
+        <svg viewBox="0 0 24 24"><path d="M4 20h4l10-10-4-4L4 16v4Z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg>
+        <span>入力</span>
+      </button>
+      <button class="nav-btn" data-tab="preview" type="button">
+        <svg viewBox="0 0 24 24"><path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6-10-6-10-6Z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><circle cx="12" cy="12" r="2.6" fill="none" stroke="currentColor" stroke-width="1.6"/></svg>
+        <span>プレビュー</span>
+      </button>
+      <button class="nav-btn" data-tab="settings" type="button">
+        <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M19.4 13a7.6 7.6 0 0 0 0-2l2-1.4-2-3.4-2.3.8a7.7 7.7 0 0 0-1.8-1l-.3-2.4h-4l-.3 2.4a7.7 7.7 0 0 0-1.8 1l-2.3-.8-2 3.4 2 1.4a7.6 7.6 0 0 0 0 2l-2 1.4 2 3.4 2.3-.8a7.7 7.7 0 0 0 1.8 1l.3 2.4h4l.3-2.4a7.7 7.7 0 0 0 1.8-1l2.3.8 2-3.4-2-1.4Z" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/></svg>
+        <span>設定</span>
+      </button>
+    </nav>
+  </section>
+
 </div>
 
-<!-- 共有モーダル -->
-<div id="shareModal" class="modal hidden">
-  <div class="modal-content">
-    <h3>共有</h3>
-    <input id="shareName" type="text" placeholder="お名前を入力してください（任意）">
-    <button id="shareBtn">共有する</button>
-  </div>
-</div>
-
-</div>
 <script src="app.js"></script>
 </body>
 </html>

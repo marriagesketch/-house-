@@ -1,20 +1,31 @@
 /* ============================================================
-   住まい すり合わせ – app.js
+   住まい すり合わせ – app.js（自動ペア判定方式）
    ------------------------------------------------------------
-   共有リンクは「id（短いランダムID）＋復号鍵（URLのフラグメント）」
-   のみで構成される。回答本体は暗号化されたうえで GAS 経由で
-   スプレッドシートに保存され、復号鍵はサーバーに送信されない
-   （URLの # 以降はブラウザからサーバーへ送信されないため）。
+   家族紹介（familyintroduction/app.js）と同じ自動ペア判定方式を採用。
+   ・ユーザーは暗号キーの入力も共有リンクの送付も一切行わない。
+   ・サーバーに送るのは ownerHash（LINE userIdのSHA-256）だけ。
+   ・この用途専用のGASが毎回 Partners中央API に ownerHash を
+     問い合わせ、「現在の真剣交際パートナー」と「ペア専用の暗号鍵
+     材料(pairKey)」を自動的に取得し、fetchPairの応答に含めて返す。
+   ・pairKeyの生値はユーザーには一切表示せず、ブラウザのメモリ上で
+     AES鍵の導出にのみ使う（自分／お相手双方の回答の暗号化・復号のため）。
+   ・家族紹介と同様、住まいの希望はお互いが「それぞれ自分の希望」を
+     回答するコンテンツのため、プレビューは「自分」と「お相手」の
+     2つを切り替えて表示する。お相手のページは閲覧専用（編集不可）。
+   ・「送信する」を押すまでは、自分の回答はこの端末の中だけに
+     保存され、お相手には届かない（サーバーに行が存在しない＝
+     未送信として扱われる）。
    ============================================================ */
 
-// ▼▼▼ 要設定 ▼▼▼
-const LIFF_ID      = "2010312230-0FcbsxfS";          // この住まいアプリ用に発行したLIFF ID
-const GAS_ENDPOINT = "https://script.google.com/macros/s/AKfycbwq_7A9X1dvZu0FyN7F-7XuBcxj_csvP68-OtTXChuE6nGw4Ov0fqO6tpZVXcElTJn8/exec";     // デプロイ済みGAS Web AppのURL
-// ▲▲▲▲▲▲▲▲▲▲▲▲
+const LIFF_ID = "2010312230-0FcbsxfS";
 
-const DRAFT_KEY = "konkatsu_suriawase_house_draft";
-const PENDING_SHARED_VIEW_KEY = "konkatsu_suriawase_house_pending_shared_view";
-const SHARETARGETPICKER_IMAGE_URL = "https://marriagesketch.github.io/-house-/sharetargetpicker.jpg";
+/* ▼▼▼ この住まいアプリ用に新しくデプロイしたGAS Web AppのURLをここに設定してください ▼▼▼ */
+const GAS_ENDPOINT = "https://script.google.com/macros/s/AKfycbwq_7A9X1dvZu0FyN7F-7XuBcxj_csvP68-OtTXChuE6nGw4Ov0fqO6tpZVXcElTJn8/exec";
+
+/* ▼▼▼ パートナー登録（真剣交際パートナー機能）のLIFF URL ▼▼▼ */
+const PARTNER_REGISTRATION_URL = "https://liff.line.me/2010312230-xUsYz0UB";
+
+const STORAGE_KEY = "house_suriawase_draft_v1";
 
 /* ============================================================
    Q4 の5段階評価
@@ -37,7 +48,50 @@ const Q3_TITLES = {
 };
 
 /* ============================================================
-   共通ユーティリティ
+   ユーティリティ
+   ============================================================ */
+function escapeHTML(str) {
+  return String(str)
+    .replace(/&/g, "&amp;").replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+}
+
+/* ------------------------------------------------------------
+   スクショ抑止用ウォーターマーク
+   ------------------------------------------------------------
+   スクリーンショットの撮影自体は検知・ブロックできないため、
+   「撮られても誰が・いつ見た画面かが写り込む」ようにし、
+   無断転載・拡散への心理的な抑止力として機能させる。
+   お相手の回答を閲覧している間のみ表示する。
+   ------------------------------------------------------------ */
+function buildWatermarkSVG(lines) {
+  const tileW = 240, tileH = 140, lineHeight = 16;
+  const startY = tileH / 2 - ((lines.length - 1) * lineHeight) / 2;
+  const textEls = lines.map((line, i) => {
+    const y = startY + i * lineHeight;
+    return `<text x="0" y="${y}" font-size="12" font-family="sans-serif" ` +
+           `fill="rgba(0,0,0,0.1)" transform="rotate(-28 ${tileW / 2} ${tileH / 2})">${escapeHTML(line)}</text>`;
+  }).join("");
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${tileW}" height="${tileH}">${textEls}</svg>`;
+  return `data:image/svg+xml,${encodeURIComponent(svg)}`;
+}
+
+function showScreenshotWatermark(viewerHash) {
+  const el = document.getElementById("screenshotWatermark");
+  if (!el) return;
+  const stamp = new Date().toLocaleString("ja-JP", {
+    year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit",
+  });
+  el.style.backgroundImage = `url("${buildWatermarkSVG(["スクショ・転載禁止", `${viewerHash.slice(0, 8)}  ${stamp}`])}")`;
+  el.classList.add("show");
+}
+function hideScreenshotWatermark() {
+  const el = document.getElementById("screenshotWatermark");
+  if (el) el.classList.remove("show");
+}
+
+/* ============================================================
+   Base64URL 変換ユーティリティ（暗号文の符号化に使用）
    ============================================================ */
 function bufToBase64Url(buf) {
   const bytes = new Uint8Array(buf);
@@ -45,7 +99,6 @@ function bufToBase64Url(buf) {
   for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
   return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=/g, "");
 }
-
 function base64UrlToBuf(str) {
   const padded = str.replace(/-/g, "+").replace(/_/g, "/");
   const pad    = padded.length % 4;
@@ -56,22 +109,30 @@ function base64UrlToBuf(str) {
   return bytes.buffer;
 }
 
+/* ============================================================
+   SHA-256ハッシュ（LINE UserIDのハッシュ化。生IDはサーバーに送らない）
+   ============================================================ */
 async function sha256Hex(str) {
   const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(str));
   return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, "0")).join("");
 }
 
-/* AES-GCM 暗号化（鍵はURLフラグメントにのみ含め、サーバーには渡さない） */
-async function generateShareKey() {
-  const key = await crypto.subtle.generateKey({ name: "AES-GCM", length: 256 }, true, ["encrypt", "decrypt"]);
-  const raw = await crypto.subtle.exportKey("raw", key);
-  return { key, base64: bufToBase64Url(raw) };
+/* ============================================================
+   暗号鍵材料（pairKey）からのAES鍵導出
+   ・pairKeyの生値はfetchPairの応答で自動的に受け取る。
+     ユーザーが目にしたり入力したりすることはない。
+   ・他アプリ（家族紹介・プロポーズプラン等）とpairKeyの値自体は
+     共通でも、導出に使うプレフィックスをアプリごとに変えることで、
+     アプリをまたいで同じ鍵が再利用されないようにしている。
+   ============================================================ */
+async function deriveAesKey(pairKey) {
+  const material = await crypto.subtle.digest("SHA-256", new TextEncoder().encode("house-suriawase-cipher:" + pairKey));
+  return crypto.subtle.importKey("raw", material, { name: "AES-GCM" }, false, ["encrypt", "decrypt"]);
 }
 
-async function importShareKey(base64) {
-  return crypto.subtle.importKey("raw", base64UrlToBuf(base64), { name: "AES-GCM" }, false, ["decrypt"]);
-}
-
+/* ============================================================
+   AES-GCM 暗号化ユーティリティ
+   ============================================================ */
 async function encryptJSON(obj, key) {
   const iv  = crypto.getRandomValues(new Uint8Array(12));
   const enc = new TextEncoder().encode(JSON.stringify(obj));
@@ -81,32 +142,23 @@ async function encryptJSON(obj, key) {
   combined.set(new Uint8Array(cipherBuf), iv.length);
   return bufToBase64Url(combined.buffer);
 }
-
 async function decryptJSON(base64, key) {
   const combined = new Uint8Array(base64UrlToBuf(base64));
-  const plainBuf = await crypto.subtle.decrypt(
-    { name: "AES-GCM", iv: combined.slice(0, 12) }, key, combined.slice(12));
+  const iv   = combined.slice(0, 12);
+  const data = combined.slice(12);
+  const plainBuf = await crypto.subtle.decrypt({ name: "AES-GCM", iv }, key, data);
   return JSON.parse(new TextDecoder().decode(plainBuf));
 }
 
-/* LINEユーザーID取得（IDトークンのデコードのみ。追加通信なし） */
+/* ------------------------------------------------------------
+   LINEユーザーIDの取得
+   ------------------------------------------------------------ */
 function getLineUserId() {
   const idToken = liff.getDecodedIDToken();
-  if (!idToken || !idToken.sub) throw new Error("ID token is not available (sub claim missing)");
+  if (!idToken || !idToken.sub) {
+    throw new Error("ID token is not available (sub claim missing)");
+  }
   return idToken.sub;
-}
-
-function escapeHTML(str) {
-  return String(str)
-    .replace(/&/g, "&amp;").replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;").replace(/"/g, "&quot;");
-}
-
-function fallbackUUID() {
-  return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, c => {
-    const r = (Math.random() * 16) | 0;
-    return (c === "x" ? r : (r & 0x3) | 0x8).toString(16);
-  });
 }
 
 /* ============================================================
@@ -116,13 +168,7 @@ function getQ4Selects() {
   return document.querySelectorAll('select[id^="q4_"]');
 }
 
-/* HTMLに #q4Counter が無ければ、Q4の注意書き（.q-note）の直後に
-   カウンター表示用の枠を自動で挿入する */
 function initQ4() {
-  if (!document.getElementById("q4Counter")) {
-    const note = document.querySelector(".q-note");
-    if (note) note.insertAdjacentHTML("afterend", '<div id="q4Counter"></div>');
-  }
   getQ4Selects().forEach(sel =>
     sel.addEventListener("change", () => { sel.classList.remove("unanswered"); updateQ4Counter(); }));
   updateQ4Counter();
@@ -136,7 +182,7 @@ function updateQ4Counter() {
   getQ4Selects().forEach(sel => {
     if (!sel.value) unanswered++; else counts[sel.value]++;
   });
-  const short = ["必須", "できれば", "現状あり・なくても可", "こだわらない", "避けたい"];
+  const short = ["必須", "できれば", "現状OK・なくても可", "こだわらない", "避けたい"];
   counter.innerHTML =
     LEVELS.map((l, i) => `${short[i]} <b>${counts[l]}</b>`).join(" ／ ") +
     ` ／ 未回答 <b>${unanswered}</b>`;
@@ -183,6 +229,13 @@ function restoreFormData(data) {
   updateQ4Counter();
 }
 
+function isFormEmpty(data) {
+  if (data.q1_self.trim() || data.q1_partner.trim() || data.q2.trim() || data.q5.trim()) return false;
+  if (Q3_CHECK_NAMES.some(n => data[n].length > 0)) return false;
+  if (Object.values(data.q4).some(v => v)) return false;
+  return true;
+}
+
 /* ============================================================
    バリデーション
    ============================================================ */
@@ -223,42 +276,172 @@ function buildAnalyticsPayload(data) {
 }
 
 /* ============================================================
-   状態表示・ビューモード
+   下書き保存／復元（この端末の中だけ。お相手には届かない）
    ============================================================ */
-function hideFormElements() {
-  const f = document.getElementById("formArea");
-  if (f) f.style.display = "none";
-  const m = document.getElementById("shareModal");
-  if (m) m.style.display = "none";
+function saveDraft() {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(collectFormData()));
+    flashSaved();
+  } catch (e) { console.warn("draft save failed", e); }
+}
+function flashSaved() {
+  const b = document.getElementById("saveStatus"); if (!b) return;
+  b.classList.add("just-saved"); setTimeout(() => b.classList.remove("just-saved"), 400);
+}
+function loadDraft() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY); if (!raw) return false;
+    const data = JSON.parse(raw);
+    restoreFormData(data);
+    return !isFormEmpty(data);
+  } catch (e) { console.warn("draft load failed", e); return false; }
 }
 
-function getViewContainer() {
-  let c = document.getElementById("viewMode");
-  if (!c) {
-    c = document.createElement("div");
-    c.id = "viewMode";
-    document.querySelector(".container").prepend(c);
+/* ============================================================
+   ペア状態（パートナー登録確認・自分／お相手の回答）
+   ============================================================ */
+const AppState = {
+  ownerHash: null,
+  aesKey: null,
+  partnerDisplayName: "",
+  ownSubmittedAt: null,     // 自分が最後に送信した日時（未送信ならnull）
+  partnerCipherText: null,  // お相手の暗号化データ（未送信ならnull）
+  partnerUpdatedAt: null,
+};
+
+async function fetchPair(ownerHash) {
+  const url = `${GAS_ENDPOINT}?action=fetchPair&ownerHash=${encodeURIComponent(ownerHash)}`;
+  const resp = await fetch(url, { method: "GET" });
+  return resp.json();
+}
+
+async function submitOwnData() {
+  const data = collectFormData();
+  const cipherText = await encryptJSON(data, AppState.aesKey);
+  const analytics  = buildAnalyticsPayload(data);
+  const resp = await fetch(GAS_ENDPOINT, {
+    method: "POST",
+    headers: { "Content-Type": "text/plain;charset=utf-8" }, // preflight回避のため text/plain を使用
+    body: JSON.stringify({ action: "submit", ownerHash: AppState.ownerHash, cipherText, analytics }),
+  });
+  if (!resp.ok) {
+    const bodyText = await resp.text().catch(() => "(本文を取得できませんでした)");
+    console.error(`submit failed: HTTP ${resp.status} ${resp.statusText}`, bodyText);
+    throw new Error(`http_${resp.status}`);
   }
-  c.style.display = "block";
-  return c;
+  const result = await resp.json();
+  if (!result.ok) throw new Error(result.reason || "submit_failed");
+  AppState.ownSubmittedAt = result.updatedAt || new Date().toISOString();
+  return result;
 }
 
-function showStateCard(title, text, isLoading = false) {
-  hideFormElements();
-  getViewContainer().innerHTML = `
-    <div class="view-header state-card">
+/* ============================================================
+   状態表示（パートナー確認中・エラーなど）
+   ============================================================ */
+function showAppState(title, text, isLoading = false) {
+  document.getElementById("app").style.display = "none";
+  document.getElementById("partnerRequired").style.display = "none";
+  const pv = document.getElementById("publicView");
+  pv.style.display = "block";
+  pv.innerHTML = `
+    <div class="state-card">
       ${isLoading ? `
         <div class="state-spinner">
           <img src="https://developers.line.biz/media/line-mini-app/LINE_spinner_light.svg" class="spinner-light" alt="読み込み中">
           <img src="https://developers.line.biz/media/line-mini-app/LINE_spinner_dark.svg" class="spinner-dark" alt="読み込み中">
-        </div>` : ""}
-      <p class="view-label">${escapeHTML(title)}</p>
+        </div>
+      ` : ""}
+      <p class="state-title">${escapeHTML(title)}</p>
       <p class="state-text">${escapeHTML(text)}</p>
-    </div>`;
+    </div>
+  `;
 }
 
-function renderViewMode(data, options = {}) {
-  const { selfPreview = false, onShare = null } = options;
+function showPartnerRequired() {
+  document.getElementById("app").style.display = "none";
+  document.getElementById("publicView").style.display = "none";
+  document.getElementById("partnerRequired").style.display = "block";
+}
+
+function showApp() {
+  document.getElementById("publicView").style.display = "none";
+  document.getElementById("partnerRequired").style.display = "none";
+  document.getElementById("app").style.display = "";
+}
+
+/* ============================================================
+   パートナー登録確認（自動ペア判定）
+   ============================================================ */
+async function initPairing() {
+  showAppState("読み込み中…", "パートナー登録の状況を確認しています。少々お待ちください。", true);
+
+  const ownerHash = await sha256Hex(getLineUserId());
+  AppState.ownerHash = ownerHash;
+
+  let result;
+  try {
+    result = await fetchPair(ownerHash);
+  } catch (e) {
+    console.error("fetchPair failed", e);
+    showAppState("読み込みに失敗しました", "時間をおいてもう一度開き直してください。");
+    return false;
+  }
+
+  if (!result.ok) {
+    if (result.reason === "no_partner" || result.reason === "partner_ended") {
+      showPartnerRequired();
+    } else {
+      showAppState("読み込みに失敗しました", "時間をおいてもう一度開き直してください。");
+    }
+    return false;
+  }
+
+  AppState.aesKey             = await deriveAesKey(result.pairKey);
+  AppState.partnerDisplayName = result.partnerDisplayName || "";
+  AppState.ownSubmittedAt     = result.own ? result.own.updatedAt : null;
+  AppState.partnerCipherText  = result.partner ? result.partner.cipherText : null;
+  AppState.partnerUpdatedAt   = result.partner ? result.partner.updatedAt : null;
+
+  const partnerBtn = document.getElementById("partnerTabBtn");
+  if (partnerBtn) partnerBtn.textContent = AppState.partnerDisplayName ? `${AppState.partnerDisplayName}さん` : "お相手";
+
+  showApp();
+  return true;
+}
+
+/* ペア情報だけを取り直す（画面遷移はせず、お相手の最新状況だけ更新） */
+async function refetchPair() {
+  let result;
+  try {
+    result = await fetchPair(AppState.ownerHash);
+  } catch (e) {
+    console.error("refetchPair failed", e);
+    alert("お相手の状況を取得できませんでした。通信環境を確認してもう一度お試しください。");
+    return false;
+  }
+  if (!result.ok) {
+    showPartnerRequired(); // 取得中に交際終了などがあった場合は案内画面に戻す
+    return false;
+  }
+  AppState.partnerDisplayName = result.partnerDisplayName || "";
+  AppState.partnerCipherText  = result.partner ? result.partner.cipherText : null;
+  AppState.partnerUpdatedAt   = result.partner ? result.partner.updatedAt : null;
+  const partnerBtn = document.getElementById("partnerTabBtn");
+  if (partnerBtn) partnerBtn.textContent = AppState.partnerDisplayName ? `${AppState.partnerDisplayName}さん` : "お相手";
+  return true;
+}
+
+/* ============================================================
+   表示用 HTML ビルダー（自分／お相手 共通のQ&A表示）
+   ============================================================ */
+function formatDateLabel(iso) {
+  if (!iso) return "";
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return "";
+  return `${d.getFullYear()}/${String(d.getMonth() + 1).padStart(2, "0")}/${String(d.getDate()).padStart(2, "0")}`;
+}
+
+function buildQARowsHTML(data) {
   const r = (v) => (v && String(v).trim()) ? escapeHTML(v).replace(/\n/g, "<br>") : "未回答";
   const list = (arr) => (Array.isArray(arr) && arr.length) ? arr.map(escapeHTML).join("、") : "未回答";
 
@@ -282,237 +465,174 @@ function renderViewMode(data, options = {}) {
 
   rows.push({ q: "Q5 ほかに希望条件があれば記載してください。", html: r(data.q5) });
 
-  hideFormElements();
-  const formURL = location.href.split("?")[0].split("#")[0];
+  return rows.map(({ q, html }) => `
+    <div class="view-item">
+      <p class="view-question">${escapeHTML(q)}</p>
+      <p class="view-answer">${html}</p>
+    </div>`).join("");
+}
 
-  const descEl = document.querySelector(".form-header .form-description");
-  if (descEl) {
-    descEl.innerHTML =
-      "回答を共有してお互いのことを知りましょう。<br>" +
-      "回答内容だけじゃなく、なぜそう思ってるのか、この場合はどう変わるかなども質問し合ってみましょう。";
-  }
+/* ----- 自分のプレビュー（編集中の内容をそのまま表示。編集はできない＝閲覧専用の表示） ----- */
+function renderOwnPreview() {
+  const container = document.getElementById("previewContent");
+  container.innerHTML = buildQARowsHTML(collectFormData());
+}
 
-  getViewContainer().innerHTML = `
-    ${selfPreview ? `
-    <div class="cta-card share-confirm-card">
-      <div class="cta-content" style="text-align:center;">
-        <h3 class="cta-title">この内容を共有します</h3>
-        <p class="cta-text">内容を確認したら、共有先を選んでください。</p>
-        <button type="button" id="goShareBtn" class="cta-button">共有先を選ぶ <span class="cta-arrow">›</span></button>
+/* ----- お相手のプレビュー（まだ未送信なら案内のみ。常に閲覧専用） ----- */
+async function renderPartnerPreview() {
+  const container = document.getElementById("previewContent");
+  const name = AppState.partnerDisplayName || "お相手";
+
+  if (!AppState.partnerCipherText) {
+    container.innerHTML = `
+      <div class="preview-empty">
+        ${escapeHTML(name)}さんはまだ回答を送信していません。<br>
+        送信されると、ここに表示されます。
       </div>
-    </div>` : `
-    <div class="view-header">
-      <p class="view-label">回答内容</p>
-      ${data._shareName ? `<p class="view-name">${escapeHTML(data._shareName)} さんの回答</p>` : ""}
-    </div>`}
-
-    ${rows.map(({ q, html }) => `
-      <div class="view-item">
-        <p class="view-question">${escapeHTML(q)}</p>
-        <p class="view-answer">${html}</p>
-      </div>`).join("")}
-
-    ${!selfPreview ? `
-    <div class="cta-card">
-      <img src="shareimage.webp" class="cta-image-left" alt="">
-      <div class="cta-content">
-        <h3 class="cta-title">あなたの希望も共有してみませんか？</h3>
-        <p class="cta-text">
-          同居前の住まいの希望のすり合わせは、<br>
-          お互いを知る大切なきっかけになります。<br>
-          あなたの考えをアンケートで伝えてみましょう。
-        </p>
-        <button type="button" id="ctaButton" class="cta-button" data-href="${formURL}">
-          私も回答する <span class="cta-arrow">›</span>
-        </button>
-      </div>
-    </div>` : ""}
-  `;
-
-  if (selfPreview) {
-    const b = document.getElementById("goShareBtn");
-    if (b && typeof onShare === "function") b.addEventListener("click", onShare);
-    return;
-  }
-  const cta = document.getElementById("ctaButton");
-  if (cta) cta.addEventListener("click", () => {
-    if (confirm("住まい すり合わせフォームを開く")) window.location.href = cta.dataset.href;
-  });
-}
-
-/* ============================================================
-   共有リンクを開いたときの処理
-   ============================================================ */
-async function handleSharedView(id) {
-  showStateCard("読み込み中…", "回答内容を確認しています。少々お待ちください。", true);
-
-  const keyBase64 = location.hash ? location.hash.slice(1) : "";
-  if (!keyBase64) {
-    showStateCard("リンクが不完全です",
-      "共有リンクが途中で切れているか、正しくコピーされていない可能性があります。共有した相手にもう一度リンクを送ってもらってください。");
-    return;
-  }
-
-  if (!liff.isLoggedIn()) {
-    try { sessionStorage.setItem(PENDING_SHARED_VIEW_KEY, location.href); } catch (_) {}
-    liff.login();
-    return;
-  }
-
-  let key;
-  try { key = await importShareKey(keyBase64); }
-  catch (e) {
-    console.error("key import error", e);
-    showStateCard("リンクが正しくありません", "共有リンクが壊れている可能性があります。");
-    return;
-  }
-
-  let viewerHash;
-  try { viewerHash = await sha256Hex(getLineUserId()); }
-  catch (e) {
-    console.error("get user id error", e);
-    showStateCard("エラー",
-      "LINEアカウント情報の確認に失敗しました。時間をおいてもう一度お試しください。（詳細: " + (e && e.message ? e.message : String(e)) + "）");
-    return;
-  }
-
-  let result;
-  try {
-    const url = `${GAS_ENDPOINT}?action=view&id=${encodeURIComponent(id)}&viewerHash=${encodeURIComponent(viewerHash)}`;
-    result = await (await fetch(url, { method: "GET" })).json();
-  } catch (e) {
-    console.error("fetch view error", e);
-    showStateCard("通信エラー", "回答内容を取得できませんでした。通信環境を確認してもう一度お試しください。");
-    return;
-  }
-
-  if (!result.ok) {
-    const r = result.reason;
-    if (r === "forbidden" || r === "partner_locked") {
-      showStateCard("閲覧できません", "このリンクは最初に開いた方専用です。転送されたリンクは、その方以外は閲覧できない仕組みになっています。");
-    } else if (r === "revoked" || r === "expired" || r === "deleted") {
-      showStateCard("リンクが無効です", "このリンクはすでに無効になっています。最新の共有リンクを送ってもらってください。");
-    } else if (r === "not_found") {
-      showStateCard("リンクが見つかりません", "このリンクは存在しないか、削除された可能性があります。");
-    } else {
-      showStateCard("エラー", "回答内容を取得できませんでした。時間をおいて再度お試しください。");
-    }
-    return;
-  }
-
-  let data;
-  try { data = await decryptJSON(result.cipherText, key); }
-  catch (e) {
-    console.error("decrypt error", e);
-    showStateCard("復号に失敗しました", "リンクの一部が正しくない可能性があります。共有した相手にもう一度リンクを送ってもらってください。");
-    return;
-  }
-
-  renderViewMode(data);
-  showScreenshotWatermark(viewerHash);
-}
-
-/* ============================================================
-   スクショ抑止用ウォーターマーク
-   撮影自体は防げないため、「誰が・いつ閲覧した画面か」が写り込む
-   ようにして無断転載への心理的抑止力とする。
-   ============================================================ */
-function buildWatermarkSVG(lines) {
-  const tileW = 240, tileH = 140, lineHeight = 16;
-  const startY = tileH / 2 - ((lines.length - 1) * lineHeight) / 2;
-  const textEls = lines.map((line, i) =>
-    `<text x="0" y="${startY + i * lineHeight}" font-size="12" font-family="sans-serif" ` +
-    `fill="rgba(0,0,0,0.1)" transform="rotate(-28 ${tileW / 2} ${tileH / 2})">${escapeHTML(line)}</text>`
-  ).join("");
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${tileW}" height="${tileH}">${textEls}</svg>`;
-  return `data:image/svg+xml,${encodeURIComponent(svg)}`;
-}
-
-function showScreenshotWatermark(viewerHash) {
-  const el = document.getElementById("screenshotWatermark");
-  if (!el) return;
-  const stamp = new Date().toLocaleString("ja-JP", {
-    year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit",
-  });
-  el.style.backgroundImage = `url("${buildWatermarkSVG(["スクショ・転載禁止", `${viewerHash.slice(0, 8)}  ${stamp}`])}")`;
-  el.classList.add("show");
-}
-
-/* ============================================================
-   共有（Flexメッセージ／シェアターゲットピッカー）
-   ============================================================ */
-function buildShareFlexMessage(shareName, shareURL) {
-  const nameLine = shareName ? `${shareName}さんの回答が届きました` : "回答が届きました";
-  return {
-    type: "flex",
-    altText: `住まい すり合わせ - ${nameLine}`,
-    contents: {
-      type: "bubble",
-      hero: { type: "image", url: SHARETARGETPICKER_IMAGE_URL, size: "full", aspectRatio: "3:2", aspectMode: "cover" },
-      body: {
-        type: "box", layout: "vertical", spacing: "md", paddingAll: "20px",
-        contents: [
-          { type: "text", text: "住まい すり合わせ", size: "xs", weight: "bold", color: "#d96c7d" },
-          { type: "text", text: nameLine, size: "lg", weight: "bold", wrap: true, margin: "sm" },
-          { type: "text", text: "ボタンから回答内容を確認できます。", size: "sm", color: "#888888", wrap: true, margin: "md" },
-        ],
-      },
-      footer: {
-        type: "box", layout: "vertical", spacing: "sm", paddingAll: "20px",
-        contents: [{
-          type: "button", style: "primary", height: "sm", color: "#f48ca0",
-          action: { type: "uri", label: "回答をみる", uri: shareURL },
-        }],
-      },
-    },
-  };
-}
-
-async function shareToOthers(flexMessage, fallbackLineSchemeURL) {
-  if (liff.isApiAvailable("shareTargetPicker")) {
+      <button type="button" class="partner-refresh-btn" id="partnerRefreshBtn">最新の状況を取得する</button>
+    `;
+  } else {
+    let data;
     try {
-      await liff.shareTargetPicker([flexMessage], { isMultiple: true });
-      return;
+      data = await decryptJSON(AppState.partnerCipherText, AppState.aesKey);
     } catch (e) {
-      console.warn("shareTargetPicker failed, falling back to URL scheme:", e);
+      console.error("decrypt partner data failed", e);
+      container.innerHTML = `<div class="preview-empty">お相手のデータの復号に失敗しました。時間をおいてもう一度お試しください。</div>`;
+      return;
     }
+    const dateLabel = formatDateLabel(AppState.partnerUpdatedAt);
+    container.innerHTML = `
+      <div class="view-header">
+        <p class="view-label">回答内容</p>
+        <p class="view-name">${escapeHTML(name)} さんの回答</p>
+        ${dateLabel ? `<p class="view-name" style="font-size:12px;font-weight:400;color:#888;margin-top:6px;">送信日：${escapeHTML(dateLabel)}</p>` : ""}
+      </div>
+      ${buildQARowsHTML(data)}
+      <button type="button" class="partner-refresh-btn" id="partnerRefreshBtn">最新の状況を取得する</button>
+    `;
   }
-  if (liff.isInClient()) window.location.href = fallbackLineSchemeURL;
-  else window.open(fallbackLineSchemeURL, "_blank");
+
+  const refreshBtn = document.getElementById("partnerRefreshBtn");
+  if (refreshBtn) {
+    refreshBtn.addEventListener("click", async () => {
+      refreshBtn.disabled = true;
+      refreshBtn.textContent = "取得中…";
+      const ok = await refetchPair();
+      if (ok && currentPreviewPerson === "partner") await renderPartnerPreview();
+      refreshBtn.disabled = false;
+      refreshBtn.textContent = "最新の状況を取得する";
+    });
+  }
 }
 
-async function handleShare(data, shareName) {
-  data._shareName = shareName;
+/* ============================================================
+   プレビュー：自分／お相手 切り替え
+   ============================================================ */
+let currentPreviewPerson = "own";
 
-  const ownerHash = await sha256Hex(getLineUserId());
-  const id = crypto.randomUUID ? crypto.randomUUID() : fallbackUUID();
-  const { key, base64: keyBase64 } = await generateShareKey();
-  const cipherText = await encryptJSON(data, key);
-  const analytics  = buildAnalyticsPayload(data);
-
-  const resp = await fetch(GAS_ENDPOINT, {
-    method: "POST",
-    headers: { "Content-Type": "text/plain;charset=utf-8" }, // preflight回避
-    body: JSON.stringify({ action: "share", id, cipherText, ownerHash, analytics, schemaVersion: 1 }),
+async function switchPreviewPerson(person) {
+  currentPreviewPerson = person;
+  document.querySelectorAll(".preview-person-switcher .sub-switch-btn").forEach(btn => {
+    btn.classList.toggle("active", btn.dataset.person === person);
   });
-  const result = await resp.json();
-  if (!result.ok) throw new Error(result.reason || "share_failed");
 
-  const base     = location.href.split("?")[0].split("#")[0];
-  const shareURL = `${base}?id=${id}#${keyBase64}`;
-  const previewMsg = shareName
-    ? `${shareName}さんの住まい すり合わせの回答が届きました。\n回答をみる→${shareURL}`
-    : `住まい すり合わせの回答が届きました。\n回答をみる→${shareURL}`;
-  const flexMessage = buildShareFlexMessage(shareName, shareURL);
+  const ownSubmittedAtEl = document.getElementById("ownSubmittedAt");
+  const sendBtn = document.getElementById("sendBtn");
 
-  renderViewMode(data, {
-    selfPreview: true,
-    onShare: () => {
-      const lineShareURL = `https://line.me/R/msg/text/?${encodeURIComponent(previewMsg)}`;
-      shareToOthers(flexMessage, lineShareURL);
-    },
+  if (person === "own") {
+    hideScreenshotWatermark();
+    if (sendBtn) sendBtn.classList.remove("hidden");
+    renderOwnPreview();
+    if (ownSubmittedAtEl) {
+      ownSubmittedAtEl.textContent = AppState.ownSubmittedAt
+        ? `お相手への送信日時：${formatDateLabel(AppState.ownSubmittedAt)}`
+        : "まだお相手に送信していません。「送信する」を押すと届きます。";
+      ownSubmittedAtEl.classList.remove("hidden");
+    }
+  } else {
+    if (sendBtn) sendBtn.classList.add("hidden");
+    if (ownSubmittedAtEl) ownSubmittedAtEl.classList.add("hidden");
+    await renderPartnerPreview();
+    showScreenshotWatermark(AppState.ownerHash);
+  }
+}
+
+/* ============================================================
+   タブ切替
+   ============================================================ */
+function switchTab(tab) {
+  ["input", "preview", "settings"].forEach(t => {
+    document.getElementById(`tab-${t}`).classList.toggle("hidden", t !== tab);
   });
-  window.scrollTo({ top: 0, behavior: "smooth" });
+  document.querySelectorAll(".bottom-nav .nav-btn").forEach(btn => {
+    btn.classList.toggle("active", btn.dataset.tab === tab);
+  });
+  const titles = { preview: "プレビュー", settings: "設定" };
+  document.getElementById("appBarTitle").textContent = titles[tab] || "住まい すり合わせ";
+
+  if (tab === "preview") {
+    switchPreviewPerson(currentPreviewPerson);
+  } else {
+    hideScreenshotWatermark();
+  }
+}
+
+/* ============================================================
+   イベント登録
+   ============================================================ */
+function bindEvents() {
+  let saveTimer = null;
+  document.getElementById("tab-input").addEventListener("input", () => {
+    clearTimeout(saveTimer); saveTimer = setTimeout(saveDraft, 500);
+  });
+  document.getElementById("tab-input").addEventListener("change", () => {
+    clearTimeout(saveTimer); saveTimer = setTimeout(saveDraft, 500);
+  });
+
+  document.querySelectorAll(".bottom-nav .nav-btn").forEach(btn => {
+    btn.addEventListener("click", () => switchTab(btn.dataset.tab));
+  });
+
+  document.querySelectorAll(".preview-person-switcher .sub-switch-btn").forEach(btn => {
+    btn.addEventListener("click", () => switchPreviewPerson(btn.dataset.person));
+  });
+
+  /* ----- 送信ボタン：お相手へ直接送信（ペアとして登録済みのお相手にのみ届く） ----- */
+  document.getElementById("sendBtn").addEventListener("click", async () => {
+    const data = collectFormData();
+    const errors = validate(data);
+    if (errors.length > 0) {
+      switchTab("input");
+      setTimeout(() => alert("以下の項目を入力・選択してください。\n\n" + errors.join("\n")), 50);
+      return;
+    }
+
+    const name = AppState.partnerDisplayName || "お相手";
+    if (!confirm(`入力内容を${name}さんに送信しますか？\n送信すると、これまでの内容が上書きされます。`)) return;
+
+    const sendBtn = document.getElementById("sendBtn");
+    sendBtn.disabled = true;
+    const originalLabel = sendBtn.textContent;
+    sendBtn.textContent = "送信中…";
+
+    try {
+      await submitOwnData();
+      alert("送信しました。");
+      if (currentPreviewPerson === "own") switchPreviewPerson("own");
+    } catch (e) {
+      console.error("submit error", e);
+      alert("送信に失敗しました。通信環境を確認してもう一度お試しください。");
+    } finally {
+      sendBtn.disabled = false;
+      sendBtn.textContent = originalLabel;
+    }
+  });
+
+  document.getElementById("resetBtn").addEventListener("click", () => {
+    if (!confirm("入力内容を削除して最初から作成しますか？この操作は取り消せません。\n（すでにお相手に送信済みの内容は、この操作では削除されません）")) return;
+    try { localStorage.removeItem(STORAGE_KEY); } catch (_) {}
+    location.reload();
+  });
 }
 
 /* ============================================================
@@ -523,7 +643,7 @@ async function checkFriendship() {
     const friendship = await liff.getFriendship();
     if (!friendship.friendFlag) {
       try { await liff.requestFriendship(); }
-      catch (error) { console.warn("友だち追加リクエスト失敗:", error); }
+      catch (error) { console.warn("友だち追加リクエスト失敗（ユーザーがキャンセルした可能性があります）:", error); }
     }
   } catch (error) {
     console.warn("友だち確認をスキップ:", error);
@@ -542,100 +662,41 @@ async function checkFriendship() {
     return;
   }
 
-  /* 共有リンク判定（ログイン往復でURLが崩れた場合はsessionStorageから復元） */
-  let sharedId = new URLSearchParams(location.search).get("id");
-  if (!sharedId) {
-    try {
-      const pending = sessionStorage.getItem(PENDING_SHARED_VIEW_KEY);
-      if (pending) {
-        const pendingURL = new URL(pending);
-        const pendingId = new URLSearchParams(pendingURL.search).get("id");
-        if (pendingId) {
-          sharedId = pendingId;
-          const restoredHash = location.hash || pendingURL.hash;
-          history.replaceState(null, "", location.pathname + pendingURL.search + restoredHash);
-        }
-      }
-    } catch (_) {}
-  }
-  try { sessionStorage.removeItem(PENDING_SHARED_VIEW_KEY); } catch (_) {}
-
-  if (sharedId) { await handleSharedView(sharedId); return; }
-
   if (!liff.isLoggedIn()) { liff.login(); return; }
 
+  /* LIFF初期化・ログイン後に友だち確認（未追加ならダイアログで追加を促す）
+     通信を伴うため画面構築をブロックしないよう、裏側で実行する
+     （fire-and-forget）。 */
   checkFriendship();
+
+  /* パートナー登録の確認（未登録・交際終了なら案内を表示して終了） */
+  const paired = await initPairing();
+  if (!paired) return;
+
+  const hadDraft = loadDraft();
   initQ4();
+  bindEvents();
 
-  /* 下書き復元 */
-  try {
-    const saved = localStorage.getItem(DRAFT_KEY);
-    if (saved) restoreFormData(JSON.parse(saved));
-  } catch (_) {}
+  const startBtn  = document.getElementById("startBtn");
+  const resumeBtn = document.getElementById("resumeBtn");
+  if (hadDraft) { resumeBtn.classList.remove("hidden"); startBtn.textContent = "新しく作成する"; }
 
-  /* 下書き保存 */
-  document.getElementById("draftBtn").addEventListener("click", () => {
-    try {
-      localStorage.setItem(DRAFT_KEY, JSON.stringify(collectFormData()));
-      alert("下書きを保存しました。");
-    } catch (_) {
-      alert("下書きの保存に失敗しました。");
+  function goToMain() {
+    document.getElementById("screen-top").classList.add("hidden");
+    document.getElementById("screen-main").classList.remove("hidden");
+    switchTab("input");
+  }
+
+  startBtn.addEventListener("click", () => {
+    if (hadDraft && !confirm("これまでの下書きを削除して、新しく作成しますか？\n（すでにお相手に送信済みの内容は、この操作では削除されません）")) return;
+    if (hadDraft) {
+      document.querySelectorAll('#tab-input input[type="text"], #tab-input textarea').forEach(el => (el.value = ""));
+      document.querySelectorAll('#tab-input input[type="checkbox"]').forEach(el => (el.checked = false));
+      getQ4Selects().forEach(el => { el.value = ""; el.classList.remove("unanswered"); });
+      updateQ4Counter();
+      try { localStorage.removeItem(STORAGE_KEY); } catch (_) {}
     }
+    goToMain();
   });
-
-  /* フォームクリア */
-  document.getElementById("clearBtn").addEventListener("click", () => {
-    if (!confirm("入力内容をすべてクリアしますか？")) return;
-    ["q1_self", "q1_partner", "q2", "q5"].forEach(id => (document.getElementById(id).value = ""));
-    document.querySelectorAll('input[type="checkbox"]').forEach(el => (el.checked = false));
-    getQ4Selects().forEach(el => { el.value = ""; el.classList.remove("unanswered"); });
-    updateQ4Counter();
-    try { localStorage.removeItem(DRAFT_KEY); } catch (_) {}
-  });
-
-  /* 送信 */
-  document.getElementById("submitBtn").addEventListener("click", () => {
-    const data = collectFormData();
-    const errors = validate(data);
-    if (errors.length > 0) {
-      alert("以下の項目を入力・選択してください。\n\n" + errors.join("\n"));
-      return;
-    }
-    try { localStorage.setItem(DRAFT_KEY, JSON.stringify(data)); } catch (_) {}
-    const modal = document.getElementById("shareModal");
-    modal.classList.remove("hidden");
-    modal.classList.add("show");
-    document.getElementById("submitBtn").disabled = true;
-  });
-
-  /* 共有ボタン */
-  const shareBtn = document.getElementById("shareBtn");
-  shareBtn.addEventListener("click", async () => {
-    const shareName = (document.getElementById("shareName").value || "").trim();
-    shareBtn.disabled = true;
-    const originalLabel = shareBtn.textContent;
-    shareBtn.textContent = "送信中…";
-    try {
-      await handleShare(collectFormData(), shareName);
-      const modal = document.getElementById("shareModal");
-      modal.classList.remove("show");
-      modal.classList.add("hidden");
-    } catch (e) {
-      console.error("share error", e);
-      alert("共有の準備に失敗しました。通信環境を確認してもう一度お試しください。");
-      document.getElementById("submitBtn").disabled = false;
-    } finally {
-      shareBtn.disabled = false;
-      shareBtn.textContent = originalLabel;
-    }
-  });
-
-  /* モーダル外クリックで閉じる */
-  document.getElementById("shareModal").addEventListener("click", (e) => {
-    if (e.target === e.currentTarget) {
-      e.currentTarget.classList.remove("show");
-      e.currentTarget.classList.add("hidden");
-      document.getElementById("submitBtn").disabled = false;
-    }
-  });
+  resumeBtn.addEventListener("click", goToMain);
 })();
