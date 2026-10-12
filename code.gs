@@ -39,7 +39,7 @@
       GAS_ENDPOINT に設定する。
    ============================================================ */
 
-var SPREADSHEET_ID  = 'YOUR_SPREADSHEET_ID';   // ← 要設定
+var SPREADSHEET_ID  = '1nL6nMZyMPt1fHtXb6ZworDNjwEtKK3x8Y3v10iK8jxA';   // ← 要設定
 var SHARES_SHEET    = 'Shares';
 var ANALYTICS_SHEET = 'Analytics';
 var SCHEMA_VERSION  = 1;
