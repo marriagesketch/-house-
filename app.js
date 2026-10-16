@@ -1,5 +1,5 @@
 /* ============================================================
-   住まい すり合わせ – app.js（自動ペア判定方式）
+   家条件のすり合わせ – app.js（自動ペア判定方式）
    ------------------------------------------------------------
    家族紹介（familyintroduction/app.js）と同じ自動ペア判定方式を採用。
    ・ユーザーは暗号キーの入力も共有リンクの送付も一切行わない。
@@ -568,7 +568,7 @@ function switchTab(tab) {
     btn.classList.toggle("active", btn.dataset.tab === tab);
   });
   const titles = { preview: "プレビュー", settings: "設定" };
-  document.getElementById("appBarTitle").textContent = titles[tab] || "住まい すり合わせ";
+  document.getElementById("appBarTitle").textContent = titles[tab] || "家条件のすり合わせ";
 
   if (tab === "preview") {
     switchPreviewPerson(currentPreviewPerson);
